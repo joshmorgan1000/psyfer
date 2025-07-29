@@ -16,6 +16,8 @@
 #include <cstdlib>
 #include <logger/logger.hpp>
 
+namespace std {
+
 // Global context singleton implementation
 GlobalContext &getGlobalContext() {
     static GlobalContext instance;
@@ -151,9 +153,6 @@ void set_internal_log_level(LogLevel level) {
 void log_message(LogLevel level, const std::string& message) {
     if (getGlobalContext().global_log_level > level)
         return;
-    
-    // Display banner on first log message
-    display_banner();
     
     std::stringstream oss;
     
@@ -299,4 +298,4 @@ void log_trace(const std::string& message) {
     log_message(LogLevel::TRACE, message);
 }
 
-} // namespace psyne
+}

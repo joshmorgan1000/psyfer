@@ -1,5 +1,5 @@
-#include "../include/ink_packet.hpp"
-#include "../../include/encryption.hpp"
+#include <inkpacket/ink_packet.hpp>
+#include <psyfer.hpp>
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -7,7 +7,7 @@
 #include <cstring>
 #include <array>
 
-namespace psyne::ink {
+namespace ink {
 
 namespace fs = std::filesystem;
 
@@ -295,12 +295,12 @@ void __ink_packet_init() {
     std::vector<uint8_t> calculate_hash(const std::vector<uint8_t>& data) {
         std::vector<uint8_t> hash;
         
-        if (config.hash_algo == 0) { // BLAKE3
-            blake3_hasher hasher;
-            blake3_hasher_init(&hasher);
-            blake3_hasher_update(&hasher, data.data(), data.size());
+        if (config.hash_algo == 0) { // SHA-256
             hash.resize(32);
-            blake3_hasher_finalize(&hasher, hash.data(), 32);
+            psyfer::hash::sha256::hash(
+                std::span<const std::byte>(reinterpret_cast<const std::byte*>(data.data()), data.size()),
+                std::span<std::byte>(reinterpret_cast<std::byte*>(hash.data()), 32)
+            );
         }
         
         return hash;
@@ -308,13 +308,14 @@ void __ink_packet_init() {
     
     std::vector<uint8_t> encrypt_payload(const std::vector<uint8_t>& data,
                                          const std::vector<uint8_t>& hash) {
-        // Derive encryption key from hash
+        // Derive encryption key from hash using HMAC-SHA256
         uint8_t key[32];
-        blake3_hasher kdf_hasher;
-        blake3_hasher_init_keyed(&kdf_hasher, hash.data());
         const char* context = "ink_packet_key";
-        blake3_hasher_update(&kdf_hasher, context, strlen(context));
-        blake3_hasher_finalize(&kdf_hasher, key, 32);
+        psyfer::hash::hmac_sha256::hmac(
+            std::span<const std::byte>(reinterpret_cast<const std::byte*>(hash.data()), hash.size()),
+            std::span<const std::byte>(reinterpret_cast<const std::byte*>(context), strlen(context)),
+            std::span<std::byte>(reinterpret_cast<std::byte*>(key), 32)
+        );
         
         if (config.enc_algo == 0) { // AES-256-GCM
             return encrypt_aes_gcm(key, data);
@@ -372,4 +373,4 @@ bool InkPacketBuilder::build() {
     return impl_->build(log_, error_);
 }
 
-} // namespace psyne::ink
+}

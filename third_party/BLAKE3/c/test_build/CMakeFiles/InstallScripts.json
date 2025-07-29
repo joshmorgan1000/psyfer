@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/joshmorgan/projects/psyne/dependencies/encryption/third_party/BLAKE3/c/test_build/cmake_install.cmake",
-		"/Users/joshmorgan/projects/psyne/dependencies/encryption/third_party/BLAKE3/c/test_build/dependencies/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

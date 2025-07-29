@@ -43,4 +43,6 @@
 CLAUDE.md
 build/
 CMakeCache.txt
+.claude/
+.vscode/
 

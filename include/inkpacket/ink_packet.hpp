@@ -8,7 +8,7 @@
 #include <span>
 #include <array>
 
-namespace psyne::ink {
+namespace ink {
 
 /**
  * @brief Self-size placeholder embedded in the application binary
@@ -330,4 +330,4 @@ private:
     std::string error_;
 };
 
-} // namespace psyne::ink
+}

@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <memory>
 #include <chrono>
+namespace std {
 template<typename T>
 concept Streamable=requires(std::ostream &os,T const &t){{os<<t}->std::convertible_to<std::ostream &>;};
 template<typename T> concept HasToJson=requires(T t){{t.toJson()}->std::convertible_to<std::string>;};
@@ -158,9 +159,10 @@ iterator end() { return iterator(container_.end(), container_.end(), nullptr, co
 template<typename Container> tracked_container<Container>
 track_container(const Container& c, const std::string& header) {
 return tracked_container<Container>(c, header); } inline void stdout_lock()
-{ uint64_t ticket = psyne::getGlobalContext().next_ticket.fetch_add(1);
+{ uint64_t ticket = getGlobalContext().next_ticket.fetch_add(1);
 uint64_t current = getGlobalContext().currently_serving.load();
 while (current != ticket) { getGlobalContext().currently_serving.wait(current);
 current = getGlobalContext().currently_serving.load(); } }
 inline void stdout_unlock() { getGlobalContext().currently_serving.fetch_add(1);
 getGlobalContext().currently_serving.notify_all(); }
+}

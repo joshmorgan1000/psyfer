@@ -40,7 +40,7 @@ void print_verbose_info() {
     std::cout << "• Decrypts critical code into memory only\n";
     std::cout << "• Includes anti-debugging protections\n\n";
     std::cout << "Security features:\n";
-    std::cout << "• BLAKE3 hash verification\n";
+    std::cout << "• SHA-256 hash verification\n";
     std::cout << "• AES-256-GCM encryption\n";
     std::cout << "• Constant-time comparisons\n";
     std::cout << "• Memory protection and cleanup\n";

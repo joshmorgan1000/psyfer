@@ -19,7 +19,7 @@ void print_usage(const char* program) {
     std::cout << "  --compiler <cc>  Compiler to use (default: clang++)\n";
     std::cout << "  --cxxflags <f>   Compiler flags (default: -std=c++20 -O2)\n";
     std::cout << "  --no-strip       Don't strip debug symbols\n";
-    std::cout << "  --hash <algo>    Hash algorithm: blake3, sha256 (default: blake3)\n";
+    std::cout << "  --hash <algo>    Hash algorithm: sha256, sha512 (default: sha256)\n";
     std::cout << "  --enc <algo>     Encryption: aes-gcm, chacha20 (default: aes-gcm)\n";
     std::cout << "  -h, --help       Show this help\n";
     std::cout << "\nExample:\n";
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    psyne::ink::InkPacketBuilder::Config config;
+    ink::InkPacketBuilder::Config config;
     std::string main_source;
     
     // Parse command line
@@ -66,8 +66,8 @@ int main(int argc, char* argv[]) {
         }
         else if (arg == "--hash" && i + 1 < argc) {
             std::string hash = argv[++i];
-            if (hash == "blake3") config.hash_algo = 0;
-            else if (hash == "sha256") config.hash_algo = 1;
+            if (hash == "sha256") config.hash_algo = 0;
+            else if (hash == "sha512") config.hash_algo = 1;
             else {
                 std::cerr << "Unknown hash algorithm: " << hash << "\n";
                 return 1;
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "\n";
     
-    psyne::ink::InkPacketBuilder builder(config);
+    ink::InkPacketBuilder builder(config);
     
     if (!builder.build()) {
         std::cerr << "Build failed: " << builder.get_error() << "\n";
