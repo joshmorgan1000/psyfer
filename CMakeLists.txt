@@ -108,14 +108,6 @@ endif()
 add_subdirectory(tests)
 
 # ──────────────────────────────────────────────────────────────
-# Examples
-# ──────────────────────────────────────────────────────────────
-option(BUILD_EXAMPLES "Build example programs" ON)
-if(BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
-
-# ──────────────────────────────────────────────────────────────
 # Print configuration summary
 # ──────────────────────────────────────────────────────────────
 message(STATUS "______________________________________________________")
