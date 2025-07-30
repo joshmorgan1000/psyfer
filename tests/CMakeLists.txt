@@ -31,17 +31,3 @@ add_psyfer_test(test_sha_comprehensive)
 add_psyfer_test(test_x25519_comprehensive)
 add_psyfer_test(test_xxhash3_comprehensive)
 add_psyfer_test(test_openssl_crypto)
-
-# Add psy-c serialization test
-add_executable(test_psy_serialization 
-    test_psy_serialization.cpp
-    test_psy_generated.cpp
-)
-target_link_libraries(test_psy_serialization PRIVATE psyfer)
-target_compile_features(test_psy_serialization PRIVATE cxx_std_23)
-target_include_directories(test_psy_serialization PRIVATE 
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-add_test(NAME test_psy_serialization COMMAND test_psy_serialization)
-

@@ -319,7 +319,7 @@ bool aes128_commoncrypto_available() noexcept {
 
 void aes128_encrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept {
     size_t bytes_encrypted = 0;
-    CCCryptorStatus status = CCCrypt(
+    [[maybe_unused]] CCCryptorStatus status = CCCrypt(
         kCCEncrypt,
         kCCAlgorithmAES128,
         kCCOptionECBMode,  // ECB mode for single block
@@ -333,7 +333,7 @@ void aes128_encrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept {
 
 void aes128_decrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept {
     size_t bytes_decrypted = 0;
-    CCCryptorStatus status = CCCrypt(
+    [[maybe_unused]] CCCryptorStatus status = CCCrypt(
         kCCDecrypt,
         kCCAlgorithmAES128,
         kCCOptionECBMode,  // ECB mode for single block

@@ -34,7 +34,7 @@ namespace {
     };
     
     // Additional xxHash3 constants
-    constexpr uint32_t PRIME32_1 = 0x9E3779B1U;
+    [[maybe_unused]] constexpr uint32_t PRIME32_1 = 0x9E3779B1U;
     constexpr uint32_t PRIME32_2 = 0x85EBCA77U;
     constexpr uint32_t PRIME32_3 = 0xC2B2AE3DU;
     
@@ -341,8 +341,8 @@ uint64_t xxhash3_64::hasher::finalize() noexcept {
 
 // xxHash3 128-bit implementation
 xxhash3_128::hash128 xxhash3_128::hash(std::span<const std::byte> data, uint64_t seed) noexcept {
-    const std::byte* ptr = data.data();
-    size_t len = data.size();
+    [[maybe_unused]] const std::byte* ptr = data.data();
+    [[maybe_unused]] size_t len = data.size();
     
     // For 128-bit variant, we compute two 64-bit hashes with different seeds
     uint64_t low = xxhash3_64::hash(data, seed);

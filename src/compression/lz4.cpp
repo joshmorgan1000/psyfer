@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <bit>
 
-namespace psyfer::compression {
+namespace psyfer::crypto {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper for 64-bit reads
@@ -641,4 +641,4 @@ result<std::vector<std::byte>> lz4_frame::decompress_frame(
     return output;
 }
 
-} // namespace psyfer::compression
+} // namespace psyfer::crypto
