@@ -8,7 +8,7 @@
 #include <cstring>
 #include <bit>
 
-namespace psyfer::crypto::detail {
+namespace psyfer {
 
 /**
  * @brief Reverse bytes in a 16-byte block (for GCM's bit ordering)
@@ -102,4 +102,4 @@ void ghash_portable(
     }
 }
 
-} // namespace psyfer::crypto::detail
+} // namespace psyfer

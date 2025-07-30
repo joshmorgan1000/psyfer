@@ -10,10 +10,10 @@
 #include <CommonCrypto/CommonKeyDerivation.h>
 #endif
 
-namespace psyfer::kdf {
+namespace psyfer {
 
 // HKDF-Extract implementations
-void hkdf::extract_sha256(
+void hextract_sha256(
     std::span<const std::byte> salt,
     std::span<const std::byte> ikm,
     std::span<std::byte, 32> prk
@@ -22,13 +22,13 @@ void hkdf::extract_sha256(
     // If salt is empty, use string of zeros
     if (salt.empty()) {
         std::array<std::byte, 32> zero_salt{};
-        hash::hmac_sha256::hmac(zero_salt, ikm, prk);
+        hmac_sha256_algorithm::hmac(zero_salt, ikm, prk);
     } else {
-        hash::hmac_sha256::hmac(salt, ikm, prk);
+        hmac_sha256_algorithm::hmac(salt, ikm, prk);
     }
 }
 
-void hkdf::extract_sha512(
+void hextract_sha512(
     std::span<const std::byte> salt,
     std::span<const std::byte> ikm,
     std::span<std::byte, 64> prk
@@ -37,20 +37,20 @@ void hkdf::extract_sha512(
     // If salt is empty, use string of zeros
     if (salt.empty()) {
         std::array<std::byte, 64> zero_salt{};
-        hash::hmac_sha512::hmac(zero_salt, ikm, prk);
+        hmac_sha512_algorithm::hmac(zero_salt, ikm, prk);
     } else {
-        hash::hmac_sha512::hmac(salt, ikm, prk);
+        hmac_sha512_algorithm::hmac(salt, ikm, prk);
     }
 }
 
 // HKDF-Expand implementations
-std::error_code hkdf::expand_sha256(
+std::error_code hexpand_sha256(
     std::span<const std::byte, 32> prk,
     std::span<const std::byte> info,
     std::span<std::byte> okm
 ) noexcept {
     // Check output length
-    if (okm.size() > MAX_OUTPUT_SHA256) {
+    if (okm.size() > 255 * 32) { // MAX_OUTPUT_SHA256
         return make_error_code(error_code::invalid_buffer_size);
     }
     
@@ -68,7 +68,7 @@ std::error_code hkdf::expand_sha256(
     
     for (size_t i = 1; i <= n; ++i) {
         // T(i) = HMAC-Hash(PRK, T(i-1) | info | counter)
-        hash::hmac_sha256 hmac(prk);
+        hmac_sha256_algorithm hmac(prk);
         
         // Add T(i-1) if not first iteration
         if (i > 1) {
@@ -98,13 +98,13 @@ std::error_code hkdf::expand_sha256(
     return {};
 }
 
-std::error_code hkdf::expand_sha512(
+std::error_code hexpand_sha512(
     std::span<const std::byte, 64> prk,
     std::span<const std::byte> info,
     std::span<std::byte> okm
 ) noexcept {
     // Check output length
-    if (okm.size() > MAX_OUTPUT_SHA512) {
+    if (okm.size() > 255 * 64) { // MAX_OUTPUT_SHA512
         return make_error_code(error_code::invalid_buffer_size);
     }
     
@@ -122,7 +122,7 @@ std::error_code hkdf::expand_sha512(
     
     for (size_t i = 1; i <= n; ++i) {
         // T(i) = HMAC-Hash(PRK, T(i-1) | info | counter)
-        hash::hmac_sha512 hmac(prk);
+        hmac_sha512_algorithm hmac(prk);
         
         // Add T(i-1) if not first iteration
         if (i > 1) {
@@ -169,10 +169,10 @@ std::error_code hkdf::derive_sha256(
     
     // Extract step
     std::array<std::byte, 32> prk;
-    extract_sha256(salt, ikm, prk);
+    hextract_sha256(salt, ikm, prk);
     
     // Expand step
-    return expand_sha256(prk, info, okm);
+    return hexpand_sha256(prk, info, okm);
 }
 
 std::error_code hkdf::derive_sha512(
@@ -183,10 +183,10 @@ std::error_code hkdf::derive_sha512(
 ) noexcept {
     // Extract step
     std::array<std::byte, 64> prk;
-    extract_sha512(salt, ikm, prk);
+    hextract_sha512(salt, ikm, prk);
     
     // Expand step
-    return expand_sha512(prk, info, okm);
+    return hexpand_sha512(prk, info, okm);
 }
 
-} // namespace psyfer::kdf
+} // namespace psyfer

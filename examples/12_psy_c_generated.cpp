@@ -79,6 +79,42 @@ public:
     virtual size_t decrypt(std::span<const std::byte> buffer,
                           std::span<const std::byte, 32> key) = 0;
                           
+    /**
+     * @brief Convenience method to encrypt and return a vector
+     * @param key Encryption key
+     * @return Encrypted data as a vector, or empty vector on error
+     */
+    [[nodiscard]] std::vector<std::byte> encrypt_to_vector(
+        std::span<const std::byte> key
+    ) const {
+        // Check key size
+        if (key.size() != 32) {
+            return {};
+        }
+        
+        // Get required buffer size
+        size_t required_size = encrypted_size();
+        if (required_size == 0) {
+            return {};
+        }
+        
+        // Allocate buffer
+        std::vector<std::byte> buffer(required_size);
+        
+        // Call the virtual encrypt method
+        size_t written = encrypt(buffer, std::span<const std::byte, 32>(key.data(), 32));
+        
+        // Check if encryption succeeded
+        if (written == 0) {
+            return {};
+        }
+        
+        // Resize to actual size written
+        buffer.resize(written);
+        
+        return buffer;
+    }
+    
     // Note: PsyferContext integration is done through direct calls on derived classes
 };
 
@@ -104,22 +140,22 @@ public:
         size_t size = 0;
         
         // Username (unencrypted)
-        size += serialization::field_header_size(1);
-        size += serialization::bytes_field_size(username.size());
+        size += sizeof(uint32_t); // field header
+        size += sizeof(uint32_t) + username.size(); // length + string
         
         // Email (encrypted)
-        size += serialization::field_header_size(2);
-        size += serialization::bytes_field_size(email.size() + 12 + 16); // data + nonce + tag
+        size += sizeof(uint32_t); // field header
+        size += sizeof(uint32_t) + email.size() + 12 + 16; // length + data + nonce + tag
         
         // Age (encrypted)
-        size += serialization::field_header_size(3);
-        size += serialization::bytes_field_size(4 + 12 + 16); // uint32 + nonce + tag
+        size += sizeof(uint32_t); // field header
+        size += sizeof(uint32_t) + 4 + 12 + 16; // length + uint32 + nonce + tag
         
         // Interests
-        size += serialization::field_header_size(4);
-        size += serialization::varint_size(interests.size());
+        size += sizeof(uint32_t); // field header
+        size += sizeof(uint32_t); // count
         for (const auto& interest : interests) {
-            size += serialization::bytes_field_size(interest.size());
+            size += sizeof(uint32_t) + interest.size(); // length + string
         }
         
         return size;
@@ -127,11 +163,13 @@ public:
     
     size_t encrypt(std::span<std::byte> buffer, 
                    std::span<const std::byte, 32> key) const override {
-        serialization::BufferWriter writer(buffer);
-        crypto::aes256_gcm cipher;
+        std::vector<std::byte> temp_buffer;
+        temp_buffer.reserve(buffer.size());
+        BufferWriter writer(temp_buffer);
+        aes256_gcm cipher;
         
         // Field 1: username (unencrypted)
-        writer.write_field_header(1, serialization::WireType::BYTES);
+        writer.write_field_header(1, WireType::BYTES);
         writer.write_string_field(username);
         
         // Field 2: email (encrypted)
@@ -142,13 +180,13 @@ public:
     );
             std::array<std::byte, 12> nonce;
             std::array<std::byte, 16> tag;
-            utils::secure_random::generate(nonce);
+            secure_random::generate(nonce);
             
             cipher.encrypt(email_bytes, key, nonce, tag);
             
             // Write encrypted field
-            writer.write_field_header(2, serialization::WireType::BYTES);
-            writer.write_varint(email_bytes.size() + nonce.size() + tag.size());
+            writer.write_field_header(2, WireType::BYTES);
+            writer.write_u32(static_cast<uint32_t>(email_bytes.size() + nonce.size() + tag.size()));
             writer.write_bytes(nonce);
             writer.write_bytes(tag);
             writer.write_bytes(email_bytes);
@@ -160,37 +198,43 @@ public:
             std::memcpy(age_bytes.data(), &age, sizeof(age));
             std::array<std::byte, 12> nonce;
             std::array<std::byte, 16> tag;
-            utils::secure_random::generate(nonce);
+            secure_random::generate(nonce);
             
             cipher.encrypt(age_bytes, key, nonce, tag);
             
-            writer.write_field_header(3, serialization::WireType::BYTES);
-            writer.write_varint(age_bytes.size() + nonce.size() + tag.size());
+            writer.write_field_header(3, WireType::BYTES);
+            writer.write_u32(static_cast<uint32_t>(age_bytes.size() + nonce.size() + tag.size()));
             writer.write_bytes(nonce);
             writer.write_bytes(tag);
             writer.write_bytes(age_bytes);
         }
         
         // Field 4: interests (unencrypted)
-        writer.write_field_header(4, serialization::WireType::BYTES);
-        writer.write_varint(interests.size());
+        writer.write_field_header(4, WireType::BYTES);
+        writer.write_u32(static_cast<uint32_t>(interests.size()));
         for (const auto& interest : interests) {
             writer.write_string_field(interest);
         }
         
-        return writer.position();
+        // Copy to output buffer
+        size_t written = writer.position();
+        if (written > buffer.size()) return 0;
+        std::memcpy(buffer.data(), temp_buffer.data(), written);
+        return written;
     }
     
     size_t decrypt(std::span<const std::byte> buffer,
                    std::span<const std::byte, 32> key) override {
-        serialization::BufferReader reader(buffer);
-        crypto::aes256_gcm cipher;
+        BufferReader reader(buffer);
+        aes256_gcm cipher;
         
-        while (reader.remaining() > 0) {
-            auto header = reader.read_field_header();
-            if (!header) break;
+        while (reader.has_more()) {
+            auto field_header = reader.read_u32();
+            if (!field_header) break;
+            uint32_t field_number = *field_header >> 3;
+            auto wire_type = static_cast<WireType>(*field_header & 0x7);
             
-            switch (header->field_number) {
+            switch (field_number) {
                 case 1: { // username
                     auto str = reader.read_string_field();
                     if (str) username = std::string(*str);
@@ -237,7 +281,7 @@ public:
                 }
                 
                 case 4: { // interests
-                    auto count = reader.read_varint();
+                    auto count = reader.read_u32();
                     if (!count) break;
                     
                     interests.clear();
@@ -251,10 +295,10 @@ public:
                 
                 default:
                     // Skip unknown fields
-                    if (header->wire_type == serialization::WireType::BYTES) {
+                    if (wire_type == psyfer::WireType::BYTES) {
                         auto data = reader.read_bytes_field();
-                    } else if (header->wire_type == serialization::WireType::VARINT) {
-                        reader.read_varint();
+                    } else if (wire_type == psyfer::WireType::VARINT) {
+                        reader.read_u32();
                     }
                     break;
             }
@@ -284,15 +328,15 @@ public:
     size_t encrypted_size() const override {
         // Calculate inner size
         size_t inner_size = 0;
-        inner_size += serialization::field_header_size(1) + serialization::varint_size(timestamp);
-        inner_size += serialization::field_header_size(2) + serialization::string_field_size(sender);
+        inner_size += sizeof(uint32_t) + sizeof(uint64_t); // field header + timestamp
+        inner_size += sizeof(uint32_t) + sizeof(uint32_t) + sender.size(); // field header + length + string
         
         // Compressed content
-        compression::lz4 compressor;
+        psyfer::lz4 compressor;
         size_t max_compressed = compressor.max_compressed_size(content.size());
-        inner_size += serialization::field_header_size(3) + serialization::bytes_field_size(max_compressed);
+        inner_size += sizeof(uint32_t) + sizeof(uint32_t) + max_compressed; // field header + length + bytes
         
-        inner_size += serialization::field_header_size(4) + serialization::bytes_field_size(attachment.size());
+        inner_size += sizeof(uint32_t) + sizeof(uint32_t) + attachment.size(); // field header + length + bytes
         
         // Add encryption overhead (nonce + tag)
         return inner_size + 12 + 16;
@@ -302,19 +346,19 @@ public:
                    std::span<const std::byte, 32> key) const override {
         // First serialize to temporary buffer
         std::vector<std::byte> temp_buffer(encrypted_size());
-        serialization::BufferWriter writer(temp_buffer);
+        BufferWriter writer(temp_buffer);
         
         // Field 1: timestamp
-        writer.write_field_header(1, serialization::WireType::VARINT);
-        writer.write_varint(timestamp);
+        writer.write_field_header(1, WireType::VARINT);
+        writer.write_u64(timestamp);
         
         // Field 2: sender
-        writer.write_field_header(2, serialization::WireType::BYTES);
+        writer.write_field_header(2, WireType::BYTES);
         writer.write_string_field(sender);
         
         // Field 3: content (compressed)
         {
-            compression::lz4 compressor;
+            psyfer::lz4 compressor;
             std::span<const std::byte> content_bytes(
                 reinterpret_cast<const std::byte*>(content.data()),
                 content.size()
@@ -324,13 +368,13 @@ public:
             auto result = compressor.compress(content_bytes, compressed);
             if (result) {
                 compressed.resize(result.value());
-                writer.write_field_header(3, serialization::WireType::BYTES);
+                writer.write_field_header(3, WireType::BYTES);
                 writer.write_bytes_field(compressed);
             }
         }
         
         // Field 4: attachment
-        writer.write_field_header(4, serialization::WireType::BYTES);
+        writer.write_field_header(4, WireType::BYTES);
         writer.write_bytes_field(attachment);
         
         // Now encrypt the entire message
@@ -339,9 +383,9 @@ public:
         
         std::array<std::byte, 12> nonce;
         std::array<std::byte, 16> tag;
-        utils::secure_random::generate(nonce);
+        secure_random::generate(nonce);
         
-        crypto::chacha20_poly1305 cipher;
+        chacha20_poly1305 cipher;
         auto err = cipher.encrypt(data_to_encrypt, key, nonce, tag);
         if (err) return 0;
         
@@ -369,20 +413,22 @@ public:
         std::vector<std::byte> decrypted(buffer.size() - 28);
         std::memcpy(decrypted.data(), buffer.data() + 28, decrypted.size());
         
-        crypto::chacha20_poly1305 cipher;
+        chacha20_poly1305 cipher;
         auto err = cipher.decrypt(decrypted, key, nonce, tag);
         if (err) return 0;
         
         // Parse decrypted data
-        serialization::BufferReader reader(decrypted);
+        BufferReader reader(decrypted);
         
-        while (reader.remaining() > 0) {
-            auto header = reader.read_field_header();
-            if (!header) break;
+        while (reader.has_more()) {
+            auto field_header = reader.read_u32();
+            if (!field_header) break;
+            uint32_t field_number = *field_header >> 3;
+            auto wire_type = static_cast<WireType>(*field_header & 0x7);
             
-            switch (header->field_number) {
+            switch (field_number) {
                 case 1: // timestamp
-                    if (auto val = reader.read_varint()) {
+                    if (auto val = reader.read_u64()) {
                         timestamp = *val;
                     }
                     break;
@@ -395,7 +441,7 @@ public:
                     
                 case 3: { // content (compressed)
                     if (auto compressed = reader.read_bytes_field()) {
-                        compression::lz4 decompressor;
+                        psyfer::lz4 decompressor;
                         std::vector<std::byte> decompressed(content.capacity() * 2);
                         
                         auto result = decompressor.decompress(*compressed, decompressed);
@@ -435,7 +481,7 @@ void example_user_profile() {
     profile.interests = {"cryptography", "chess", "tea parties"};
     
     // Generate encryption key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -484,7 +530,7 @@ void example_secure_message() {
     msg.attachment = {std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
     
     // Generate key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
@@ -564,7 +610,7 @@ void example_buffer_management() {
     std::cout << "\n=== Example 3: Buffer Management for psy-c Objects ===\n";
     
     // Generate shared key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
@@ -807,6 +853,91 @@ void example_batch_operations() {
     std::cout << "Batch operation verification: " << (all_match ? "✅ SUCCESS" : "❌ FAILED") << "\n";
 }
 
+/**
+ * @brief Example demonstrating the convenience encrypt method
+ */
+void example_convenience_encrypt() {
+    std::cout << "\n5. Convenience Encrypt Method Example\n";
+    std::cout << "-------------------------------------\n";
+    
+    // Create a user profile
+    UserProfile profile;
+    profile.username = "alice";
+    profile.email = "alice@example.com";
+    profile.age = 28;
+    profile.interests = {"cryptography", "security", "privacy"};
+    
+    // Generate encryption key
+    psyfer::secure_array<std::byte, 32> key;
+    secure_random::generate(key);
+    
+    std::cout << "Original profile:\n";
+    std::cout << "  Username: " << profile.username << "\n";
+    std::cout << "  Email: " << profile.email << "\n";
+    std::cout << "  Age: " << profile.age << "\n";
+    std::cout << "  Interests: ";
+    for (const auto& interest : profile.interests) {
+        std::cout << interest << " ";
+    }
+    std::cout << "\n\n";
+    
+    // Test the convenience encrypt method
+    std::cout << "Testing convenience encrypt method:\n";
+    
+    // Encrypt using the convenience method
+    std::vector<std::byte> encrypted = profile.encrypt_to_vector(std::span<const std::byte, 32>(key.data(), 32));
+    
+    if (encrypted.empty()) {
+        std::cout << "❌ Encryption failed - returned empty vector\n";
+        return;
+    }
+    
+    std::cout << "✅ Encrypted successfully\n";
+    std::cout << "  Encrypted size: " << encrypted.size() << " bytes\n";
+    
+    // Verify by decrypting
+    UserProfile decrypted_profile;
+    size_t consumed = decrypted_profile.decrypt(encrypted, std::span<const std::byte, 32>(key.data(), 32));
+    
+    if (consumed == 0) {
+        std::cout << "❌ Decryption failed\n";
+        return;
+    }
+    
+    std::cout << "✅ Decrypted successfully\n";
+    std::cout << "  Consumed: " << consumed << " bytes\n";
+    
+    // Verify data integrity
+    bool match = decrypted_profile.username == profile.username &&
+                 decrypted_profile.email == profile.email &&
+                 decrypted_profile.age == profile.age &&
+                 decrypted_profile.interests == profile.interests;
+    
+    std::cout << "\nDecrypted profile:\n";
+    std::cout << "  Username: " << decrypted_profile.username << "\n";
+    std::cout << "  Email: " << decrypted_profile.email << "\n";
+    std::cout << "  Age: " << decrypted_profile.age << "\n";
+    std::cout << "  Interests: ";
+    for (const auto& interest : decrypted_profile.interests) {
+        std::cout << interest << " ";
+    }
+    std::cout << "\n";
+    
+    std::cout << "\nData integrity check: " << (match ? "✅ PASSED" : "❌ FAILED") << "\n";
+    
+    // Test with invalid key size
+    std::cout << "\nTesting with invalid key size:\n";
+    std::vector<std::byte> short_key(16);  // Too short
+    secure_random::generate(short_key);
+    
+    std::vector<std::byte> result = profile.encrypt_to_vector(short_key);
+    if (result.empty()) {
+        std::cout << "✅ Correctly rejected invalid key size\n";
+    } else {
+        std::cout << "❌ Should have rejected invalid key size\n";
+    }
+}
+
 int main() {
     std::cout << "Psyfer psy-c Generated Code Examples\n";
     std::cout << "===================================\n";
@@ -819,6 +950,7 @@ int main() {
         example_buffer_management();
         example_psyfer_context_integration();
         example_batch_operations();
+        example_convenience_encrypt();
         
         std::cout << "\n✅ All examples completed successfully!\n";
         

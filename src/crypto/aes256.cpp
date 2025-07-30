@@ -20,7 +20,7 @@
 #endif
 #endif
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 // Forward declarations for hardware acceleration
 
@@ -427,7 +427,7 @@ void aes256_gcm::ghash(
     std::array<std::byte, 16> h_array;
     std::memcpy(h_array.data(), h.data(), 16);
     
-    detail::ghash_portable(accumulator, h_array, data);
+    ghash_portable(accumulator, h_array, data);
     
     std::memcpy(output.data(), accumulator.data(), 16);
 }
@@ -855,4 +855,4 @@ std::error_code aes256_gcm::decrypt_oneshot(
     return gcm.decrypt(data, key, nonce, tag, aad);
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

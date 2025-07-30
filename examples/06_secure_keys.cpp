@@ -16,11 +16,6 @@
 #include <iomanip>
 #include <cstring>
 
-// Using specific namespaces to avoid ambiguity
-namespace crypto = psyfer::crypto;
-namespace kdf = psyfer::kdf;
-namespace mac = psyfer::mac;
-
 /**
  * @brief Helper to check if memory appears to be zeroed
  */
@@ -39,7 +34,7 @@ void example_basic_secure_keys() {
     std::cout << "\n=== Example 1: Basic Secure Key Usage ===\n";
     
     // Generate secure 256-bit key
-    auto key_result = psyfer::utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key: " << key_result.error().message() << "\n";
         return;
@@ -60,7 +55,7 @@ void example_basic_secure_keys() {
     std::cout << std::dec << "...\n";
     
     // Key comparison
-    auto key2_result = psyfer::utils::secure_key_256::generate();
+    auto key2_result = psyfer::secure_key_256::generate();
     if (key2_result) {
         auto& key2 = *key2_result;
         bool same = (key == key2);
@@ -79,7 +74,7 @@ void example_key_sizes() {
     
     // 128-bit key
     {
-        auto key128 = psyfer::utils::secure_key_128::generate();
+        auto key128 = psyfer::secure_key_128::generate();
         if (key128) {
             std::cout << "128-bit key: " << key128->size << " bytes\n";
             
@@ -92,12 +87,12 @@ void example_key_sizes() {
     
     // 256-bit key
     {
-        auto key256 = psyfer::utils::secure_key_256::generate();
+        auto key256 = psyfer::secure_key_256::generate();
         if (key256) {
             std::cout << "\n256-bit key: " << key256->size << " bytes\n";
             
             // Use with AES-256
-            crypto::aes256_gcm cipher;
+            psyfer::aes256_gcm cipher;
             std::vector<std::byte> data = {std::byte{0x42}};
             std::array<std::byte, 12> nonce{};
             std::array<std::byte, 16> tag{};
@@ -109,7 +104,7 @@ void example_key_sizes() {
     
     // 512-bit key
     {
-        auto key512 = psyfer::utils::secure_key_512::generate();
+        auto key512 = psyfer::secure_key_512::generate();
         if (key512) {
             std::cout << "\n512-bit key: " << key512->size << " bytes\n";
             std::cout << "  Suitable for HMAC-SHA512 or key derivation\n";
@@ -124,7 +119,7 @@ void example_secure_buffers() {
     std::cout << "\n=== Example 3: Secure Memory Management ===\n";
     
     // Use secure allocator with vector
-    std::vector<std::byte, psyfer::utils::secure_allocator<std::byte>> secure_vec;
+    std::vector<std::byte, psyfer::secure_allocator<std::byte>> secure_vec;
     
     // Write sensitive data
     std::string sensitive = "My password is: SuperSecret123!";
@@ -155,7 +150,7 @@ void example_secure_allocator() {
     
     // Vector with secure allocator
     {
-        std::vector<std::byte, psyfer::utils::secure_allocator<std::byte>> secure_vec;
+        std::vector<std::byte, psyfer::secure_allocator<std::byte>> secure_vec;
         
         // Add sensitive data
         std::string secret = "API_KEY_12345678";
@@ -179,7 +174,7 @@ void example_secure_allocator() {
     // String with secure allocator
     {
         using secure_string = std::basic_string<char, std::char_traits<char>, 
-                                               psyfer::utils::secure_allocator<char>>;
+                                               psyfer::secure_allocator<char>>;
         
         secure_string password = "MyVerySecretPassword";
         std::cout << "\nSecure string length: " << password.length() << "\n";
@@ -208,7 +203,7 @@ void example_password_keys() {
     
     // Derive key using HKDF
     std::array<std::byte, 32> derived_key_data;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = psyfer::hkdf::derive_sha256(
         password_bytes,
         salt_bytes,
         std::as_bytes(std::span("encryption-key")),
@@ -216,7 +211,7 @@ void example_password_keys() {
     );
     
     // Create secure key from derived data
-    auto derived_key = psyfer::utils::secure_key_256::from_bytes(derived_key_data);
+    auto derived_key = psyfer::secure_key_256::from_bytes(derived_key_data);
     
     if (err) {
         std::cerr << "Key derivation failed: " << err.message() << "\n";
@@ -236,13 +231,13 @@ void example_password_keys() {
     
     // Derive another key with same inputs - should match
     std::array<std::byte, 32> derived_key_data2;
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         password_bytes,
         salt_bytes,
         std::as_bytes(std::span("encryption-key")),
         derived_key_data2
     );
-    auto derived_key2 = psyfer::utils::secure_key_256::from_bytes(derived_key_data2);
+    auto derived_key2 = psyfer::secure_key_256::from_bytes(derived_key_data2);
     
     bool match = (derived_key == derived_key2);
     std::cout << "Deterministic derivation: " << (match ? "✅" : "❌") << "\n";
@@ -261,13 +256,13 @@ void example_key_import_export() {
     }
     
     // Import into secure key
-    auto imported_key = psyfer::utils::secure_key_256::from_bytes(raw_key_data);
+    auto imported_key = psyfer::secure_key_256::from_bytes(raw_key_data);
     // from_bytes returns by value, not a result
     
     std::cout << "Imported 256-bit key from raw bytes\n";
     
     // Use the imported key
-    crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     std::vector<std::byte> plaintext = {std::byte{'H'}, std::byte{'i'}};
     std::array<std::byte, 12> nonce{};
     std::array<std::byte, 16> tag{};
@@ -276,7 +271,7 @@ void example_key_import_export() {
     std::cout << "Encryption with imported key: " << (err ? "FAILED" : "SUCCESS") << "\n";
     
     // Export key (only if needed - avoid if possible!)
-    std::vector<std::byte, psyfer::utils::secure_allocator<std::byte>> export_buffer(32);
+    std::vector<std::byte, psyfer::secure_allocator<std::byte>> export_buffer(32);
     std::memcpy(export_buffer.data(), imported_key.data(), 32);
     
     std::cout << "Exported key to secure buffer\n";
@@ -302,7 +297,7 @@ void example_memory_locking() {
     // Demonstrate secure random
     std::cout << "\nSecure random bytes: ";
     std::array<std::byte, 16> random_bytes;
-    psyfer::utils::secure_random::generate(random_bytes);
+    psyfer::secure_random::generate(random_bytes);
     
     for (size_t i = 0; i < 8; ++i) {
         std::cout << std::hex << std::setw(2) << std::setfill('0')
@@ -321,13 +316,13 @@ void example_key_lifetime() {
     {
         std::cout << "Creating temporary key scope...\n";
         
-        auto temp_key = psyfer::utils::secure_key_256::generate();
+        auto temp_key = psyfer::secure_key_256::generate();
         if (!temp_key) return;
         
         std::cout << "Temporary key created\n";
         
         // Use key in limited scope
-        crypto::aes256_gcm cipher;
+        psyfer::aes256_gcm cipher;
         std::vector<std::byte> data = {std::byte{1}, std::byte{2}, std::byte{3}};
         std::array<std::byte, 12> nonce{};
         std::array<std::byte, 16> tag{};
@@ -342,7 +337,7 @@ void example_key_lifetime() {
     // Demonstrate move semantics
     std::cout << "\nDemonstrating move semantics:\n";
     
-    auto key1 = psyfer::utils::secure_key_256::generate();
+    auto key1 = psyfer::secure_key_256::generate();
     if (!key1) return;
     
     std::cout << "Key 1 created\n";

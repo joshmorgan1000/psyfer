@@ -52,6 +52,7 @@ add_psyfer_example(10_user_buffer_decrypt)
 add_psyfer_example(11_compress_then_encrypt)
 add_psyfer_example(12_psy_c_generated)
 add_psyfer_example(13_complete_example)
+add_psyfer_example(simple_encrypt_method)
 
 # Create a custom target to build all examples
 add_custom_target(examples
@@ -69,6 +70,7 @@ add_custom_target(examples
         11_compress_then_encrypt
         12_psy_c_generated
         13_complete_example
+        simple_encrypt_method
 )
 
 # Installation rules for examples (optional)

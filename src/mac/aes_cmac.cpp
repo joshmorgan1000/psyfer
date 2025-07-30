@@ -6,7 +6,7 @@
 #include <psyfer.hpp>
 #include <cstring>
 
-namespace psyfer::mac {
+namespace psyfer {
 
 // Constants for CMAC
 namespace {
@@ -29,7 +29,7 @@ namespace {
 // AES-128 cipher implementation
 template<>
 struct aes_cmac<16>::cipher_impl {
-    crypto::aes128 cipher;
+    aes128 cipher;
     
     explicit cipher_impl(std::span<const std::byte, 16> key) noexcept 
         : cipher(key) {}
@@ -42,7 +42,7 @@ struct aes_cmac<16>::cipher_impl {
 // AES-256 cipher implementation
 template<>
 struct aes_cmac<32>::cipher_impl {
-    crypto::aes256 cipher;
+    aes256 cipher;
     
     explicit cipher_impl(std::span<const std::byte, 32> key) noexcept 
         : cipher(key) {}
@@ -113,8 +113,8 @@ void aes_cmac<KeySize>::left_shift_one(std::span<std::byte, BLOCK_SIZE> data) no
 template<size_t KeySize>
 void aes_cmac<KeySize>::reset() noexcept {
     // Clear state
-    utils::secure_clear(state.data(), state.size());
-    utils::secure_clear(buffer.data(), buffer.size());
+    secure_clear(state.data(), state.size());
+    secure_clear(buffer.data(), buffer.size());
     buffer_pos = 0;
 }
 
@@ -205,12 +205,10 @@ bool aes_cmac<KeySize>::verify(
     compute(data, key, computed_mac);
     
     // Constant-time comparison
-    return utils::secure_compare(computed_mac.data(), mac.data(), MAC_SIZE);
+    return secure_compare(computed_mac.data(), mac.data(), MAC_SIZE);
 }
-
-
 // Explicit template instantiations
 template class aes_cmac<16>;
 template class aes_cmac<32>;
 
-} // namespace psyfer::mac
+} // namespace psyfer

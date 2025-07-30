@@ -77,7 +77,7 @@ void test_aes256_gcm(TestResults& results) {
         auto expected_tag = hex_to_bytes("530f8afbc74536b9a963b4f1c4cb738b");
         
         std::array<std::byte, 16> tag;
-        auto result = crypto::aes256_gcm::encrypt_oneshot(
+        auto result = psyfer::aes256_gcm::encrypt_oneshot(
             plaintext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -107,7 +107,7 @@ void test_aes256_gcm(TestResults& results) {
         std::vector<std::byte> ciphertext = plaintext;
         std::array<std::byte, 16> tag;
         
-        auto result = crypto::aes256_gcm::encrypt_oneshot(
+        auto result = psyfer::aes256_gcm::encrypt_oneshot(
             ciphertext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -132,7 +132,7 @@ void test_aes256_gcm(TestResults& results) {
                       "AES-256-GCM: Standard encryption");
         
         // Test decryption
-        result = crypto::aes256_gcm::decrypt_oneshot(
+        result = psyfer::aes256_gcm::decrypt_oneshot(
             ciphertext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -162,7 +162,7 @@ void test_aes256_gcm(TestResults& results) {
         std::vector<std::byte> ciphertext = plaintext;
         std::array<std::byte, 16> tag;
         
-        auto result = crypto::aes256_gcm::encrypt_oneshot(
+        auto result = psyfer::aes256_gcm::encrypt_oneshot(
             ciphertext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -211,7 +211,7 @@ void test_chacha20_poly1305(TestResults& results) {
         std::vector<std::byte> ciphertext = plaintext;
         std::array<std::byte, 16> tag;
         
-        auto result = crypto::chacha20_poly1305::encrypt_oneshot(
+        auto result = psyfer::chacha20_poly1305::encrypt_oneshot(
             ciphertext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -237,7 +237,7 @@ void test_chacha20_poly1305(TestResults& results) {
                       "ChaCha20-Poly1305: RFC 8439 test vector");
         
         // Test decryption
-        result = crypto::chacha20_poly1305::decrypt_oneshot(
+        result = psyfer::chacha20_poly1305::decrypt_oneshot(
             ciphertext,
             std::span<const std::byte, 32>(key.data(), 32),
             std::span<const std::byte, 12>(nonce.data(), 12),
@@ -264,7 +264,7 @@ void test_sha256(TestResults& results) {
         );
         
         std::array<std::byte, 32> output;
-        hash::sha256::hash(input, output);
+        psyfer::sha256_hasher::hash(input, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected),
                       "SHA-256: Empty string");
@@ -283,7 +283,7 @@ void test_sha256(TestResults& results) {
         );
         
         std::array<std::byte, 32> output;
-        hash::sha256::hash(input, output);
+        psyfer::sha256_hasher::hash(input, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected),
                       "SHA-256: 'abc'");
@@ -297,7 +297,7 @@ void test_sha256(TestResults& results) {
         );
         
         std::array<std::byte, 32> output;
-        hash::sha256::hash(input, output);
+        psyfer::sha256_hasher::hash(input, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected),
                       "SHA-256: One million 'a's");
@@ -319,7 +319,7 @@ void test_sha512(TestResults& results) {
         );
         
         std::array<std::byte, 64> output;
-        hash::sha512::hash(input, output);
+        psyfer::sha512_hasher::hash(input, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected),
                       "SHA-512: Empty string");
@@ -339,7 +339,7 @@ void test_sha512(TestResults& results) {
         );
         
         std::array<std::byte, 64> output;
-        hash::sha512::hash(input, output);
+        psyfer::sha512_hasher::hash(input, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected),
                       "SHA-512: 'abc'");
@@ -372,7 +372,7 @@ void test_x25519(TestResults& results) {
         
         // Test public key derivation
         std::array<std::byte, 32> alice_public;
-        auto result = crypto::x25519::derive_public_key(
+        auto result = psyfer::x25519::derive_public_key(
             std::span<const std::byte, 32>(alice_private.data(), 32),
             alice_public
         );
@@ -381,7 +381,7 @@ void test_x25519(TestResults& results) {
                       "X25519: Alice public key derivation");
         
         std::array<std::byte, 32> bob_public;
-        result = crypto::x25519::derive_public_key(
+        result = psyfer::x25519::derive_public_key(
             std::span<const std::byte, 32>(bob_private.data(), 32),
             bob_public
         );
@@ -391,7 +391,7 @@ void test_x25519(TestResults& results) {
         
         // Test shared secret computation
         std::array<std::byte, 32> alice_shared;
-        result = crypto::x25519::compute_shared_secret(
+        result = psyfer::x25519::compute_shared_secret(
             std::span<const std::byte, 32>(alice_private.data(), 32),
             bob_public,
             alice_shared
@@ -401,7 +401,7 @@ void test_x25519(TestResults& results) {
                       "X25519: Alice shared secret");
         
         std::array<std::byte, 32> bob_shared;
-        result = crypto::x25519::compute_shared_secret(
+        result = psyfer::x25519::compute_shared_secret(
             std::span<const std::byte, 32>(bob_private.data(), 32),
             alice_public,
             bob_shared
@@ -434,7 +434,7 @@ void test_ed25519(TestResults& results) {
         
         // Test public key derivation
         std::array<std::byte, 32> public_key;
-        crypto::ed25519::public_key_from_private(
+        psyfer::ed25519::public_key_from_private(
             std::span<const std::byte, 32>(private_key.data(), 32),
             public_key
         );
@@ -444,7 +444,7 @@ void test_ed25519(TestResults& results) {
         
         // Test signing
         std::array<std::byte, 64> signature;
-        auto result = crypto::ed25519::sign(
+        auto result = psyfer::ed25519::sign(
             message,
             std::span<const std::byte, 32>(private_key.data(), 32),
             signature
@@ -455,7 +455,7 @@ void test_ed25519(TestResults& results) {
         results.record(!result, "Ed25519: Signing empty message");
         
         // Test verification
-        bool valid = crypto::ed25519::verify(
+        bool valid = psyfer::ed25519::verify(
             message,
             signature,
             public_key
@@ -465,7 +465,7 @@ void test_ed25519(TestResults& results) {
         
         // Test invalid signature
         signature[0] ^= std::byte{0xFF};
-        valid = crypto::ed25519::verify(
+        valid = psyfer::ed25519::verify(
             message,
             signature,
             public_key
@@ -486,7 +486,7 @@ void test_ed25519(TestResults& results) {
         );
         
         std::array<std::byte, 64> signature;
-        auto result = crypto::ed25519::sign(
+        auto result = psyfer::ed25519::sign(
             message,
             std::span<const std::byte, 32>(private_key.data(), 32),
             signature
@@ -498,11 +498,11 @@ void test_ed25519(TestResults& results) {
         
         // Verify the signature
         std::array<std::byte, 32> public_key;
-        crypto::ed25519::public_key_from_private(
+        psyfer::ed25519::public_key_from_private(
             std::span<const std::byte, 32>(private_key.data(), 32),
             public_key
         );
-        bool valid = crypto::ed25519::verify(
+        bool valid = psyfer::ed25519::verify(
             message,
             signature,
             public_key
@@ -526,7 +526,7 @@ void test_hmac(TestResults& results) {
         );
         
         std::array<std::byte, 32> output;
-        hash::hmac_sha256::hmac(key, data, output);
+        psyfer::hmac_sha256_algorithm::hmac(key, data, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected_sha256),
                       "HMAC-SHA256: RFC 4231 Test Case 1");
@@ -549,7 +549,7 @@ void test_hmac(TestResults& results) {
         );
         
         std::array<std::byte, 32> output;
-        hash::hmac_sha256::hmac(key, data, output);
+        psyfer::hmac_sha256_algorithm::hmac(key, data, output);
         
         results.record(bytes_to_hex(output) == bytes_to_hex(expected_sha256),
                       "HMAC-SHA256: RFC 4231 Test Case 2");
@@ -574,7 +574,7 @@ void test_hkdf(TestResults& results) {
         );
         
         std::vector<std::byte> okm(length);
-        auto result = kdf::hkdf::derive_sha256(ikm, salt, info, okm);
+        auto result = hkdf::derive_sha256(ikm, salt, info, okm);
         
         results.record(!result && bytes_to_hex(okm) == bytes_to_hex(expected),
                       "HKDF-SHA256: RFC 5869 Test Case 1");
@@ -594,7 +594,7 @@ void test_aes_cmac(TestResults& results) {
         auto expected = hex_to_bytes("bb1d6929e95937287fa37d129b756746");
         
         std::array<std::byte, 16> mac;
-        mac::aes_cmac_128::compute(
+        aes_cmac<16>::compute(
             message,
             std::span<const std::byte, 16>(key.data(), 16),
             mac
@@ -611,7 +611,7 @@ void test_aes_cmac(TestResults& results) {
         auto expected = hex_to_bytes("070a16b46b4d4144f79bdd9dd04a287c");
         
         std::array<std::byte, 16> mac;
-        mac::aes_cmac_128::compute(
+        aes_cmac<16>::compute(
             message,
             std::span<const std::byte, 16>(key.data(), 16),
             mac
@@ -631,7 +631,7 @@ void test_aes_cmac(TestResults& results) {
         auto expected = hex_to_bytes("dfa66747de9ae63030ca32611497c827");
         
         std::array<std::byte, 16> mac;
-        mac::aes_cmac_128::compute(
+        aes_cmac<16>::compute(
             message,
             std::span<const std::byte, 16>(key.data(), 16),
             mac

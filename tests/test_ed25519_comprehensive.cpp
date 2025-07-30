@@ -86,7 +86,7 @@ void test_known_vectors() {
         }
         
         // Generate key pair from seed
-        auto kp_result = psyfer::crypto::ed25519::key_pair_from_seed(seed);
+        auto kp_result = psyfer::ed25519::key_pair_from_seed(seed);
         if (!kp_result.has_value()) {
             std::cout << "Key generation FAILED" << std::endl;
             all_passed = false;
@@ -120,7 +120,7 @@ void test_known_vectors() {
         }
         
         std::array<std::byte, 64> signature;
-        auto ec = psyfer::crypto::ed25519::sign(message, kp.private_key, signature);
+        auto ec = psyfer::ed25519::sign(message, kp.private_key, signature);
         
         if (ec) {
             std::cout << "Signing FAILED: " << ec.message() << std::endl;
@@ -147,7 +147,7 @@ void test_known_vectors() {
         }
         
         // Verify signature
-        bool valid = psyfer::crypto::ed25519::verify(message, signature, kp.public_key);
+        bool valid = psyfer::ed25519::verify(message, signature, kp.public_key);
         
         if (valid) {
             std::cout << "PASSED" << std::endl;
@@ -166,7 +166,7 @@ void test_known_vectors() {
 void test_determinism() {
     std::cout << "\n=== Testing Ed25519 Determinism ===" << std::endl;
     
-    auto kp = psyfer::crypto::ed25519::generate_key_pair();
+    auto kp = psyfer::ed25519::generate_key_pair();
     if (!kp.has_value()) {
         std::cout << "Key generation failed" << std::endl;
         return;
@@ -180,9 +180,9 @@ void test_determinism() {
     // Sign the same message multiple times
     std::array<std::byte, 64> sig1, sig2, sig3;
     
-    auto ec1 = psyfer::crypto::ed25519::sign(message, kp->private_key, sig1);
-    auto ec2 = psyfer::crypto::ed25519::sign(message, kp->private_key, sig2);
-    auto ec3 = psyfer::crypto::ed25519::sign(message, kp->private_key, sig3);
+    auto ec1 = psyfer::ed25519::sign(message, kp->private_key, sig1);
+    auto ec2 = psyfer::ed25519::sign(message, kp->private_key, sig2);
+    auto ec3 = psyfer::ed25519::sign(message, kp->private_key, sig3);
     
     if (ec1 || ec2 || ec3) {
         std::cout << "Signing failed" << std::endl;
@@ -204,8 +204,8 @@ void test_determinism() {
 void test_security_properties() {
     std::cout << "\n=== Testing Ed25519 Security Properties ===" << std::endl;
     
-    auto kp1 = psyfer::crypto::ed25519::generate_key_pair();
-    auto kp2 = psyfer::crypto::ed25519::generate_key_pair();
+    auto kp1 = psyfer::ed25519::generate_key_pair();
+    auto kp2 = psyfer::ed25519::generate_key_pair();
     
     if (!kp1.has_value() || !kp2.has_value()) {
         std::cout << "Key generation failed" << std::endl;
@@ -219,7 +219,7 @@ void test_security_properties() {
     
     // Sign with first key
     std::array<std::byte, 64> signature;
-    auto ec = psyfer::crypto::ed25519::sign(message, kp1->private_key, signature);
+    auto ec = psyfer::ed25519::sign(message, kp1->private_key, signature);
     
     if (ec) {
         std::cout << "Signing failed" << std::endl;
@@ -228,7 +228,7 @@ void test_security_properties() {
     
     // Test 1: Correct signature verifies
     std::cout << "Valid signature verification: ";
-    if (psyfer::crypto::ed25519::verify(message, signature, kp1->public_key)) {
+    if (psyfer::ed25519::verify(message, signature, kp1->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -236,7 +236,7 @@ void test_security_properties() {
     
     // Test 2: Wrong public key fails
     std::cout << "Wrong public key rejection: ";
-    if (!psyfer::crypto::ed25519::verify(message, signature, kp2->public_key)) {
+    if (!psyfer::ed25519::verify(message, signature, kp2->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -245,7 +245,7 @@ void test_security_properties() {
     // Test 3: Modified message fails
     std::cout << "Modified message rejection: ";
     message[0] ^= std::byte{1};
-    if (!psyfer::crypto::ed25519::verify(message, signature, kp1->public_key)) {
+    if (!psyfer::ed25519::verify(message, signature, kp1->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -255,7 +255,7 @@ void test_security_properties() {
     // Test 4: Modified signature fails
     std::cout << "Modified signature rejection: ";
     signature[0] ^= std::byte{1};
-    if (!psyfer::crypto::ed25519::verify(message, signature, kp1->public_key)) {
+    if (!psyfer::ed25519::verify(message, signature, kp1->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -272,7 +272,7 @@ void test_security_properties() {
     
     for (int i = 0; i < num_tests; ++i) {
         // Fresh signature
-        ec = psyfer::crypto::ed25519::sign(message, kp1->private_key, signature);
+        ec = psyfer::ed25519::sign(message, kp1->private_key, signature);
         if (ec) continue;
         
         // Flip a random bit
@@ -281,7 +281,7 @@ void test_security_properties() {
         int bit_in_byte = bit_pos % 8;
         signature[byte_pos] ^= std::byte(1 << bit_in_byte);
         
-        if (!psyfer::crypto::ed25519::verify(message, signature, kp1->public_key)) {
+        if (!psyfer::ed25519::verify(message, signature, kp1->public_key)) {
             modifications_rejected++;
         }
     }
@@ -296,7 +296,7 @@ void test_security_properties() {
 void test_edge_cases() {
     std::cout << "\n=== Testing Edge Cases ===" << std::endl;
     
-    auto kp = psyfer::crypto::ed25519::generate_key_pair();
+    auto kp = psyfer::ed25519::generate_key_pair();
     if (!kp.has_value()) {
         std::cout << "Key generation failed" << std::endl;
         return;
@@ -307,8 +307,8 @@ void test_edge_cases() {
     std::vector<std::byte> empty_message;
     std::array<std::byte, 64> signature;
     
-    auto ec = psyfer::crypto::ed25519::sign(empty_message, kp->private_key, signature);
-    if (!ec && psyfer::crypto::ed25519::verify(empty_message, signature, kp->public_key)) {
+    auto ec = psyfer::ed25519::sign(empty_message, kp->private_key, signature);
+    if (!ec && psyfer::ed25519::verify(empty_message, signature, kp->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -318,8 +318,8 @@ void test_edge_cases() {
     std::cout << "Large message (1MB): ";
     std::vector<std::byte> large_message(1024 * 1024, std::byte{0x42});
     
-    ec = psyfer::crypto::ed25519::sign(large_message, kp->private_key, signature);
-    if (!ec && psyfer::crypto::ed25519::verify(large_message, signature, kp->public_key)) {
+    ec = psyfer::ed25519::sign(large_message, kp->private_key, signature);
+    if (!ec && psyfer::ed25519::verify(large_message, signature, kp->public_key)) {
         std::cout << "PASSED" << std::endl;
     } else {
         std::cout << "FAILED" << std::endl;
@@ -328,12 +328,12 @@ void test_edge_cases() {
     // Test all-zero private key handling
     std::cout << "Key edge cases: ";
     std::array<std::byte, 32> zero_seed{};
-    auto zero_kp = psyfer::crypto::ed25519::key_pair_from_seed(zero_seed);
+    auto zero_kp = psyfer::ed25519::key_pair_from_seed(zero_seed);
     
     if (zero_kp.has_value()) {
         std::vector<std::byte> test_msg = {std::byte{1}, std::byte{2}, std::byte{3}};
-        ec = psyfer::crypto::ed25519::sign(test_msg, zero_kp->private_key, signature);
-        if (!ec && psyfer::crypto::ed25519::verify(test_msg, signature, zero_kp->public_key)) {
+        ec = psyfer::ed25519::sign(test_msg, zero_kp->private_key, signature);
+        if (!ec && psyfer::ed25519::verify(test_msg, signature, zero_kp->public_key)) {
             std::cout << "PASSED" << std::endl;
         } else {
             std::cout << "FAILED" << std::endl;

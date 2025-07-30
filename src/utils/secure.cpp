@@ -19,7 +19,7 @@
 #include <unistd.h>
 #endif
 
-namespace psyfer::utils {
+namespace psyfer {
 
 // Platform-specific secure random implementation
 std::error_code secure_random::generate(std::span<std::byte> buffer) noexcept {
@@ -256,4 +256,4 @@ bool secure_compare(const void* a, const void* b, size_t size) noexcept {
     return result == 0;
 }
 
-} // namespace psyfer::utils
+} // namespace psyfer

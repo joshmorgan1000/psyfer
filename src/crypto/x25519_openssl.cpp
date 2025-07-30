@@ -8,7 +8,7 @@
 #include <openssl/x509.h>
 #include <memory>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 /**
  * @brief Generate X25519 private key using OpenSSL
@@ -155,4 +155,4 @@ std::error_code x25519_openssl_compute_shared_secret(
     return {};
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

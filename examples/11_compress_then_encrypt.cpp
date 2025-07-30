@@ -96,7 +96,7 @@ void example_lz4_then_aes() {
     std::cout << "Generated " << original_data.size() << " bytes of text data\n";
     
     // Step 1: Compress the data
-    compression::lz4 compressor;
+    lz4 compressor;
     std::vector<std::byte> compressed_data(compressor.max_compressed_size(original_data.size()));
     
     auto compress_result = compressor.compress(original_data, compressed_data);
@@ -111,7 +111,7 @@ void example_lz4_then_aes() {
     std::cout << "Compressed to " << compressed_size << " bytes\n";
     
     // Step 2: Encrypt the compressed data
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -119,10 +119,10 @@ void example_lz4_then_aes() {
     auto key = std::move(key_result.value());
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     std::array<std::byte, 16> tag;
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     
     // Make a copy for encryption (to preserve compressed data for comparison)
     std::vector<std::byte> encrypted_data = compressed_data;
@@ -171,7 +171,7 @@ void example_fpc_then_chacha() {
               << original_size << " bytes)\n";
     
     // Step 1: Compress with FPC
-    auto compressed_data = compression::fpc_compress(float_data);
+    auto compressed_data = psyfer::fpc_compress(float_data);
     std::cout << "FPC compressed to " << compressed_data.size() << " bytes\n";
     
     // Convert compressed data to byte span for encryption
@@ -181,7 +181,7 @@ void example_fpc_then_chacha() {
     );
     
     // Step 2: Encrypt the compressed data
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -189,10 +189,10 @@ void example_fpc_then_chacha() {
     auto key = std::move(key_result.value());
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     std::array<std::byte, 16> tag;
-    crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     
     auto encrypt_err = cipher.encrypt(compressed_span, key.span(), nonce, tag);
     if (encrypt_err) {
@@ -214,7 +214,7 @@ void example_fpc_then_chacha() {
     
     // Decompress
     std::vector<double> decompressed_data(float_data.size());
-    size_t decompressed_count = compression::fpc_decompress(
+    size_t decompressed_count = psyfer::fpc_decompress(
         std::span<const uint8_t>(compressed_data),
         decompressed_data
     );
@@ -270,7 +270,7 @@ void example_efficient_pipeline() {
     std::cout << "Processing " << original_data.size() << " bytes of data\n";
     
     // Create encryption key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -283,7 +283,7 @@ void example_efficient_pipeline() {
         packet.original_size = input.size();
         
         // Step 1: Estimate compressed size and allocate buffer
-        compression::lz4 compressor;
+        lz4 compressor;
         size_t max_compressed = compressor.max_compressed_size(input.size());
         packet.payload.resize(max_compressed);
         
@@ -298,10 +298,10 @@ void example_efficient_pipeline() {
         packet.payload.resize(packet.compressed_size);
         
         // Step 3: Generate crypto parameters
-        utils::secure_random::generate(packet.nonce);
+        secure_random::generate(packet.nonce);
         
         // Step 4: Encrypt in place
-        crypto::aes256_gcm cipher;
+        psyfer::aes256_gcm cipher;
         auto encrypt_err = cipher.encrypt(packet.payload, key.span(), packet.nonce, packet.tag);
         if (encrypt_err) {
             std::cerr << "Encryption failed\n";
@@ -339,7 +339,7 @@ void example_efficient_pipeline() {
     // Reverse pipeline: decrypt then decompress
     auto reverse_process = [&key](DataPacket& packet) -> std::optional<std::vector<std::byte>> {
         // Step 1: Decrypt
-        crypto::aes256_gcm cipher;
+        psyfer::aes256_gcm cipher;
         auto decrypt_err = cipher.decrypt(packet.payload, key.span(), packet.nonce, packet.tag);
         if (decrypt_err) {
             std::cerr << "Decryption failed\n";
@@ -348,7 +348,7 @@ void example_efficient_pipeline() {
         
         // Step 2: Decompress
         std::vector<std::byte> decompressed(packet.original_size);
-        compression::lz4 decompressor;
+        lz4 decompressor;
         
         // Note: After decryption, payload contains compressed data
         std::span<const std::byte> compressed_span(packet.payload.data(), packet.compressed_size);
@@ -382,21 +382,21 @@ void example_wrong_order() {
     auto original_data = generate_text_data(5000);
     
     // Create key and crypto parameters
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     std::array<std::byte, 16> tag;
     
     // WRONG WAY: Encrypt first
     std::vector<std::byte> encrypted_data = original_data;
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     cipher.encrypt(encrypted_data, key.span(), nonce, tag);
     
     // Try to compress encrypted data
-    compression::lz4 compressor;
+    lz4 compressor;
     std::vector<std::byte> compressed_encrypted(compressor.max_compressed_size(encrypted_data.size()));
     auto result1 = compressor.compress(encrypted_data, compressed_encrypted);
     

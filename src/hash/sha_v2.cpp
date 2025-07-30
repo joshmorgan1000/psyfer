@@ -11,7 +11,7 @@
 #include <CommonCrypto/CommonHMAC.h>
 #endif
 
-namespace psyfer::hash {
+namespace psyfer {
 
 // SHA-256 constants
 static constexpr uint32_t K256[64] = {
@@ -83,7 +83,7 @@ static uint64_t sigma1_512(uint64_t x) { return rotr(x, 19) ^ rotr(x, 61) ^ (x >
 // SHA-256 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class sha256::impl {
+class sha256_hasher::impl {
 public:
     // Software implementation state
     uint32_t state[8];
@@ -277,7 +277,7 @@ public:
 // SHA-512 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class sha512::impl {
+class sha512_hasher::impl {
 public:
     // Software implementation state
     uint64_t state[8];
@@ -482,24 +482,24 @@ public:
 // Public interface implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-sha256::sha256() noexcept : pimpl(std::make_unique<impl>()) {}
-sha256::~sha256() = default;
+sha256_hasher::sha256_hasher() noexcept : pimpl(std::make_unique<impl>()) {}
+sha256_hasher::~sha256_hasher() = default;
 
-void sha256::update(std::span<const std::byte> data) noexcept {
+void sha256_hasher::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void sha256::finalize(std::span<std::byte> output) noexcept {
+void sha256_hasher::finalize(std::span<std::byte> output) noexcept {
     if (output.size() >= 32) {
         pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
     }
 }
 
-void sha256::reset() noexcept {
+void sha256_hasher::reset() noexcept {
     pimpl->reset();
 }
 
-void sha256::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
+void sha256_hasher::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
     if (output.size() < 32) return;
     
 #ifdef __APPLE__
@@ -511,29 +511,29 @@ void sha256::hash(std::span<const std::byte> input, std::span<std::byte> output)
 #endif
     
     // Software implementation
-    sha256 hasher;
+    sha256_hasher hasher;
     hasher.update(input);
     hasher.finalize(output);
 }
 
-sha512::sha512() noexcept : pimpl(std::make_unique<impl>()) {}
-sha512::~sha512() = default;
+sha512_hasher::sha512_hasher() noexcept : pimpl(std::make_unique<impl>()) {}
+sha512_hasher::~sha512_hasher() = default;
 
-void sha512::update(std::span<const std::byte> data) noexcept {
+void sha512_hasher::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void sha512::finalize(std::span<std::byte> output) noexcept {
+void sha512_hasher::finalize(std::span<std::byte> output) noexcept {
     if (output.size() >= 64) {
         pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
     }
 }
 
-void sha512::reset() noexcept {
+void sha512_hasher::reset() noexcept {
     pimpl->reset();
 }
 
-void sha512::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
+void sha512_hasher::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
     if (output.size() < 64) return;
     
 #ifdef __APPLE__
@@ -545,9 +545,9 @@ void sha512::hash(std::span<const std::byte> input, std::span<std::byte> output)
 #endif
     
     // Software implementation
-    sha512 hasher;
+    sha512_hasher hasher;
     hasher.update(input);
     hasher.finalize(output);
 }
 
-} // namespace psyfer::hash
+} // namespace psyfer

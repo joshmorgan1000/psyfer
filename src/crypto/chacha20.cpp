@@ -11,7 +11,7 @@
 #include <memory>
 #endif
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 // ChaCha20 constants
 static constexpr uint32_t CHACHA_CONSTANTS[4] = {
@@ -748,4 +748,4 @@ std::error_code chacha20_poly1305::decrypt_oneshot(
     return cipher.decrypt(data, key, nonce, tag, aad);
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

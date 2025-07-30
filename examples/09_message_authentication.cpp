@@ -43,7 +43,7 @@ void example_hmac_sha256() {
     std::cout << "\n=== Example 1: HMAC-SHA256 ===\n";
     
     // Generate key
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -55,7 +55,7 @@ void example_hmac_sha256() {
     
     // Compute HMAC-SHA256
     std::array<std::byte, 32> hmac256;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key->span(),
         std::as_bytes(std::span(message)),
         hmac256
@@ -65,7 +65,7 @@ void example_hmac_sha256() {
     
     // Verify HMAC by recomputing
     std::array<std::byte, 32> verify_tag;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key->span(),
         std::as_bytes(std::span(message)),
         verify_tag
@@ -77,7 +77,7 @@ void example_hmac_sha256() {
     // Try with modified message
     std::string tampered = "Transfer $9000 from account 12345 to account 67890";
     std::array<std::byte, 32> tampered_tag;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key->span(),
         std::as_bytes(std::span(tampered)),
         tampered_tag
@@ -95,14 +95,14 @@ void example_hmac_sha512() {
     std::cout << "\n=== Example 2: HMAC-SHA512 ===\n";
     
     // HMAC-SHA512 uses 512-bit output
-    auto key = utils::secure_key_512::generate();
+    auto key = psyfer::secure_key_512::generate();
     if (!key) return;
     
     std::string data = "High security message requiring strong authentication";
     
     // Compute HMAC-SHA512
     std::array<std::byte, 64> hmac512;
-    hash::hmac_sha512::hmac(
+    psyfer::hmac_sha512_algorithm::hmac(
         key->span(),
         std::as_bytes(std::span(data)),
         hmac512
@@ -129,7 +129,7 @@ void example_aes_cmac() {
     std::cout << "\n=== Example 3: AES-CMAC ===\n";
     
     // AES-CMAC uses AES block cipher for MAC
-    auto key128 = utils::secure_key_128::generate();
+    auto key128 = psyfer::secure_key_128::generate();
     if (!key128) return;
     
     std::string message = "Authenticated message using AES-based MAC";
@@ -140,21 +140,21 @@ void example_aes_cmac() {
     
     // Compute AES-128-CMAC
     std::array<std::byte, 16> cmac;
-    mac::aes_cmac<16>::compute(message_bytes, key128->span(), cmac);
+    psyfer::aes_cmac<16>::compute(message_bytes, key128->span(), cmac);
     
     std::cout << "Message: \"" << message << "\"\n";
     print_mac("AES-128-CMAC", cmac);
     
     // Verify
-    bool valid = mac::aes_cmac<16>::verify(message_bytes, key128->span(), cmac);
+    bool valid = psyfer::aes_cmac<16>::verify(message_bytes, key128->span(), cmac);
     std::cout << "Self-verification: " << (valid ? "✅ VALID" : "❌ INVALID") << "\n";
     
     // AES-256-CMAC
     std::cout << "\n--- AES-256-CMAC ---\n";
-    auto key256 = utils::secure_key_256::generate();
+    auto key256 = psyfer::secure_key_256::generate();
     if (!key256) return;
     
-    mac::aes_cmac<32>::compute(message_bytes, key256->span(), cmac);
+    psyfer::aes_cmac<32>::compute(message_bytes, key256->span(), cmac);
     
     print_mac("AES-256-CMAC", cmac);
     std::cout << "Note: Output is still 128 bits (AES block size)\n";
@@ -166,11 +166,11 @@ void example_aes_cmac() {
 void example_streaming_mac() {
     std::cout << "\n=== Example 4: Streaming MAC ===\n";
     
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     // Create HMAC instance
-    hash::hmac_sha256 hmac(key->span());
+    psyfer::hmac_sha256_algorithm hmac(key->span());
     
     // Stream data in chunks
     std::vector<std::string> chunks = {
@@ -198,7 +198,7 @@ void example_streaming_mac() {
     }
     
     std::array<std::byte, 32> single_mac;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key->span(),
         std::as_bytes(std::span(full_message)),
         single_mac
@@ -222,7 +222,7 @@ void example_file_mac() {
         file << "It contains important data that must not be tampered with.\n";
     }
     
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     // Compute file MAC
@@ -232,7 +232,7 @@ void example_file_mac() {
         return;
     }
     
-    hash::hmac_sha256 hmac(key->span());
+    psyfer::hmac_sha256_algorithm hmac(key->span());
     
     // Read and hash file in chunks
     constexpr size_t CHUNK_SIZE = 4096;
@@ -266,7 +266,7 @@ void example_mac_kdf() {
     std::cout << "\n=== Example 6: MAC-Based Key Derivation ===\n";
     
     // Master key
-    auto master_key = utils::secure_key_256::generate();
+    auto master_key = psyfer::secure_key_256::generate();
     if (!master_key) return;
     
     // Derive multiple keys using HMAC
@@ -282,7 +282,7 @@ void example_mac_kdf() {
         std::array<std::byte, 32> derived;
         
         // Simple KDF: HMAC(master_key, purpose)
-        hash::hmac_sha256::hmac(
+        psyfer::hmac_sha256_algorithm::hmac(
             master_key->span(),
             std::as_bytes(std::span(purpose)),
             derived
@@ -315,18 +315,18 @@ void example_performance() {
     const int ITERATIONS = 100;
     
     std::vector<std::byte> data(MESSAGE_SIZE);
-    utils::secure_random::generate(data);
+    secure_random::generate(data);
     
     // HMAC-SHA256
     {
-        auto key = utils::secure_key_256::generate();
+        auto key = psyfer::secure_key_256::generate();
         if (!key) return;
         
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < ITERATIONS; ++i) {
             std::array<std::byte, 32> mac;
-            hash::hmac_sha256::hmac(key->span(), data, mac);
+            psyfer::hmac_sha256_algorithm::hmac(key->span(), data, mac);
         }
         
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
@@ -342,14 +342,14 @@ void example_performance() {
     
     // HMAC-SHA512
     {
-        auto key = utils::secure_key_512::generate();
+        auto key = psyfer::secure_key_512::generate();
         if (!key) return;
         
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < ITERATIONS; ++i) {
             std::array<std::byte, 64> mac;
-            hash::hmac_sha512::hmac(key->span(), data, mac);
+            psyfer::hmac_sha512_algorithm::hmac(key->span(), data, mac);
         }
         
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
@@ -365,14 +365,14 @@ void example_performance() {
     
     // AES-CMAC
     {
-        auto key = utils::secure_key_128::generate();
+        auto key = psyfer::secure_key_128::generate();
         if (!key) return;
         
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < ITERATIONS; ++i) {
             std::array<std::byte, 16> mac;
-            mac::aes_cmac<16>::compute(data, key->span(), mac);
+            psyfer::aes_cmac<16>::compute(data, key->span(), mac);
         }
         
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
@@ -408,14 +408,14 @@ void example_mac_vs_signatures() {
     std::cout << "  ✗ Larger signature size\n";
     
     // Demonstrate the difference
-    auto mac_key = utils::secure_key_256::generate();
+    auto mac_key = psyfer::secure_key_256::generate();
     if (!mac_key) return;
     
     std::string message = "Alice agrees to pay Bob $100";
     
     // MAC example
     std::array<std::byte, 32> mac;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         mac_key->span(),
         std::as_bytes(std::span(message)),
         mac

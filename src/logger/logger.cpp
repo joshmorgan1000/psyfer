@@ -16,8 +16,6 @@
 #include <cstdlib>
 #include <psyfer.hpp>
 
-namespace std {
-
 // Global context singleton implementation
 GlobalContext &getGlobalContext() {
     static GlobalContext instance;
@@ -296,6 +294,4 @@ void log_debug(const std::string& message) {
 
 void log_trace(const std::string& message) {
     log_message(LogLevel::TRACE, message);
-}
-
 }

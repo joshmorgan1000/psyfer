@@ -77,7 +77,7 @@ void test_aes256_gcm_openssl() {
     };
     
     // Test encryption
-    psyfer::crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     std::vector<std::byte> data = plaintext;
     std::array<std::byte, 16> tag;
     
@@ -222,7 +222,7 @@ void test_chacha20_poly1305_openssl() {
     };
     
     // Test encryption
-    psyfer::crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     std::vector<std::byte> data = plaintext;
     std::array<std::byte, 16> tag;
     

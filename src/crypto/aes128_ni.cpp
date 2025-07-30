@@ -11,7 +11,7 @@
 #include <emmintrin.h>
 #include <smmintrin.h>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 namespace {
     /**
@@ -122,6 +122,6 @@ void aes128_decrypt_block_ni(const uint8_t* round_keys, uint8_t* block) noexcept
     // For now, we'll skip this as CMAC only needs encryption
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer
 
 #endif // __AES__ && (__x86_64__ || __i386__)

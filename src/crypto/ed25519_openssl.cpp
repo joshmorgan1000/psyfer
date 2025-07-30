@@ -11,12 +11,12 @@
 #include <openssl/pem.h>
 #include <openssl/err.h>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 result<ed25519::key_pair> ed25519::generate_key_pair() noexcept {
     // Generate random seed
     std::array<std::byte, SEED_SIZE> seed;
-    auto ec = utils::secure_random::generate(seed);
+    auto ec = secure_random::generate(seed);
     if (ec) {
         return std::unexpected(ec);
     }
@@ -73,7 +73,7 @@ void ed25519::public_key_from_private(
     
     if (!pkey) {
         // Zero out on error
-        utils::secure_clear(public_key.data(), public_key.size());
+        secure_clear(public_key.data(), public_key.size());
         return;
     }
     
@@ -88,7 +88,7 @@ void ed25519::public_key_from_private(
     
     if (result != 1 || pubkey_len != PUBLIC_KEY_SIZE) {
         // Zero out on error
-        utils::secure_clear(public_key.data(), public_key.size());
+        secure_clear(public_key.data(), public_key.size());
     }
 }
 
@@ -199,6 +199,6 @@ bool ed25519::hardware_accelerated() noexcept {
     return true;
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer
 
 #endif // HAVE_OPENSSL

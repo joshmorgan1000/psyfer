@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 // Forward declarations for Ed25519 operations
-namespace psyfer::crypto {
+namespace psyfer {
     // Field element
     typedef struct {
         int32_t v[10];
@@ -46,7 +46,7 @@ namespace psyfer::crypto {
     extern void ge_tobytes(uint8_t* s, const ge_p2* h);
 }
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 result<ed25519::key_pair> ed25519::generate_key_pair() noexcept {
     // Always use software implementation for deterministic signatures
@@ -54,7 +54,7 @@ result<ed25519::key_pair> ed25519::generate_key_pair() noexcept {
     
     // Generate random seed
     std::array<std::byte, SEED_SIZE> seed;
-    auto ec = utils::secure_random::generate(seed);
+    auto ec = secure_random::generate(seed);
     if (ec) {
         return std::unexpected(ec);
     }
@@ -86,7 +86,7 @@ void ed25519::public_key_from_private(
     
     // Hash the private key to get the expanded key
     std::array<std::byte, 64> expanded_key;
-    hash::sha512 hasher;
+    sha512 hasher;
     hasher.update(private_key);
     hasher.finalize(expanded_key);
     
@@ -104,7 +104,7 @@ void ed25519::public_key_from_private(
     ge_p3_tobytes(reinterpret_cast<uint8_t*>(public_key.data()), &public_point);
     
     // Clear sensitive data
-    utils::secure_clear(expanded_key.data(), expanded_key.size());
+    secure_clear(expanded_key.data(), expanded_key.size());
 }
 
 std::error_code ed25519::sign(
@@ -128,7 +128,7 @@ std::error_code ed25519::sign_detached(
     
     // Step 1: Hash the private key to get the expanded key
     std::array<std::byte, 64> expanded_key;
-    hash::sha512 key_hasher;
+    sha512 key_hasher;
     key_hasher.update(private_key);
     key_hasher.finalize(expanded_key);
     
@@ -144,7 +144,7 @@ std::error_code ed25519::sign_detached(
     
     // Step 3: Compute r = SHA512(prefix || message)
     std::array<std::byte, 64> r_hash;
-    hash::sha512 r_hasher;
+    sha512 r_hasher;
     r_hasher.update(std::span<const std::byte>{expanded_key.data() + 32, 32}); // prefix
     r_hasher.update(message);
     r_hasher.finalize(r_hash);
@@ -163,7 +163,7 @@ std::error_code ed25519::sign_detached(
     
     // Step 5: Compute k = SHA512(R || A || M)
     std::array<std::byte, 64> k_hash;
-    hash::sha512 k_hasher;
+    sha512 k_hasher;
     k_hasher.update(std::span<const std::byte>{reinterpret_cast<const std::byte*>(R_bytes), 32});
     k_hasher.update(computed_public_key);
     k_hasher.update(message);
@@ -182,11 +182,11 @@ std::error_code ed25519::sign_detached(
     std::memcpy(signature.data() + 32, S_bytes, 32);
     
     // Clear sensitive data
-    utils::secure_clear(expanded_key.data(), expanded_key.size());
-    utils::secure_clear(r_hash.data(), r_hash.size());
-    utils::secure_clear(k_hash.data(), k_hash.size());
-    utils::secure_clear(r_reduced, sizeof(r_reduced));
-    utils::secure_clear(k_reduced, sizeof(k_reduced));
+    secure_clear(expanded_key.data(), expanded_key.size());
+    secure_clear(r_hash.data(), r_hash.size());
+    secure_clear(k_hash.data(), k_hash.size());
+    secure_clear(r_reduced, sizeof(r_reduced));
+    secure_clear(k_reduced, sizeof(k_reduced));
     
     return {};
 }
@@ -226,7 +226,7 @@ bool ed25519::verify_detached(
     
     // Step 4: Compute k = SHA512(R || A || M)
     std::array<std::byte, 64> k_hash;
-    hash::sha512 k_hasher;
+    sha512 k_hasher;
     k_hasher.update(std::span<const std::byte>{signature.data(), 32}); // R
     k_hasher.update(public_key);
     k_hasher.update(message);
@@ -245,11 +245,11 @@ bool ed25519::verify_detached(
     ge_tobytes(check_bytes, &check_point);
     
     // Step 7: Verify R == [S]B - [k]A
-    bool valid = utils::secure_compare(R_bytes, check_bytes, 32);
+    bool valid = secure_compare(R_bytes, check_bytes, 32);
     
     // Clear sensitive data
-    utils::secure_clear(k_hash.data(), k_hash.size());
-    utils::secure_clear(k_reduced, sizeof(k_reduced));
+    secure_clear(k_hash.data(), k_hash.size());
+    secure_clear(k_reduced, sizeof(k_reduced));
     
     return valid;
 }
@@ -260,4 +260,4 @@ bool ed25519::hardware_accelerated() noexcept {
     return false;
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

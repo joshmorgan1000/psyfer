@@ -324,7 +324,7 @@ void example_persistence() {
     std::cout << "\n=== Example 7: Context Persistence ===\n";
     
     // Generate a master key for context encryption
-    auto master_key_result = utils::secure_key_256::generate();
+    auto master_key_result = psyfer::secure_key_256::generate();
     if (!master_key_result) {
         std::cerr << "Failed to generate master key\n";
         return;

@@ -1,10 +1,8 @@
+#pragma once
 /**
  * @file x25519_cryptokit.h
  * @brief C interface for CryptoKit X25519 wrapper
  */
-
-#ifndef PSYFER_X25519_CRYPTOKIT_H
-#define PSYFER_X25519_CRYPTOKIT_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,5 +51,3 @@ bool x25519_cryptokit_available(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // PSYFER_X25519_CRYPTOKIT_H

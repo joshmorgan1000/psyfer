@@ -34,7 +34,7 @@ result<std::unique_ptr<PsyferContext>> PsyferContext::create(const Config& confi
 std::error_code PsyferContext::initialize_keys(const Config& config) noexcept {
     // Generate master key
     if (config.generate_encryption_key) {
-        auto key_result = utils::secure_key_256::generate();
+        auto key_result = secure_key_256::generate();
         if (!key_result) {
             return key_result.error();
         }
@@ -43,7 +43,7 @@ std::error_code PsyferContext::initialize_keys(const Config& config) noexcept {
     
     // Generate X25519 key pair for key exchange
     if (config.generate_key_exchange) {
-        auto kp_result = crypto::x25519::key_pair::generate();
+        auto kp_result = x25519::key_pair::generate();
         if (!kp_result) {
             return kp_result.error();
         }
@@ -52,7 +52,7 @@ std::error_code PsyferContext::initialize_keys(const Config& config) noexcept {
     
     // Generate Ed25519 key pair for signatures
     if (config.generate_signing_key) {
-        auto kp_result = crypto::ed25519::generate_key_pair();
+        auto kp_result = ed25519::generate_key_pair();
         if (!kp_result) {
             return kp_result.error();
         }
@@ -67,25 +67,25 @@ std::error_code PsyferContext::initialize_keys(const Config& config) noexcept {
 std::error_code PsyferContext::derive_subkeys() noexcept {
     // Derive HMAC key
     std::array<std::byte, 32> hmac_key_data;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = hkdf::derive_sha256(
         master_key_.span(),
         std::span<const std::byte>{},  // No salt
         std::as_bytes(std::span("psyfer-hmac-key")),
         hmac_key_data
     );
     if (err) return err;
-    hmac_key_ = utils::secure_key_256::from_bytes(hmac_key_data);
+    hmac_key_ = secure_key_256::from_bytes(hmac_key_data);
     
     // Derive psy-c key
     std::array<std::byte, 32> psy_key_data;
-    err = kdf::hkdf::derive_sha256(
+    err = hkdf::derive_sha256(
         master_key_.span(),
         std::span<const std::byte>{},  // No salt
         std::as_bytes(std::span("psyfer-psy-c-key")),
         psy_key_data
     );
     if (err) return err;
-    psy_key_ = utils::secure_key_256::from_bytes(psy_key_data);
+    psy_key_ = secure_key_256::from_bytes(psy_key_data);
     
     return {};
 }
@@ -99,11 +99,11 @@ result<PsyferContext::EncryptResult> PsyferContext::encrypt_aes(
     EncryptResult result;
     
     // Generate fresh nonce
-    auto err = utils::secure_random::generate(result.nonce);
+    auto err = secure_random::generate(result.nonce);
     if (err) return std::unexpected(err);
     
     // Encrypt in place
-    crypto::aes256_gcm cipher;
+    aes256_gcm cipher;
     err = cipher.encrypt(plaintext, master_key_.span(), result.nonce, result.tag, aad);
     if (err) return std::unexpected(err);
     
@@ -116,7 +116,7 @@ std::error_code PsyferContext::decrypt_aes(
     std::span<const std::byte, 16> tag,
     std::span<const std::byte> aad
 ) noexcept {
-    crypto::aes256_gcm cipher;
+    aes256_gcm cipher;
     return cipher.decrypt(ciphertext, master_key_.span(), nonce, tag, aad);
 }
 
@@ -174,11 +174,11 @@ result<PsyferContext::EncryptResult> PsyferContext::encrypt_chacha(
     EncryptResult result;
     
     // Generate fresh nonce
-    auto err = utils::secure_random::generate(result.nonce);
+    auto err = secure_random::generate(result.nonce);
     if (err) return std::unexpected(err);
     
     // Encrypt in place
-    crypto::chacha20_poly1305 cipher;
+    chacha20_poly1305 cipher;
     err = cipher.encrypt(plaintext, master_key_.span(), result.nonce, result.tag, aad);
     if (err) return std::unexpected(err);
     
@@ -191,7 +191,7 @@ std::error_code PsyferContext::decrypt_chacha(
     std::span<const std::byte, 16> tag,
     std::span<const std::byte> aad
 ) noexcept {
-    crypto::chacha20_poly1305 cipher;
+    chacha20_poly1305 cipher;
     return cipher.decrypt(ciphertext, master_key_.span(), nonce, tag, aad);
 }
 
@@ -208,7 +208,7 @@ result<std::vector<std::byte>> PsyferContext::encrypt_for(
     
     // Derive encryption key from shared secret
     std::array<std::byte, 32> enc_key;
-    err = kdf::hkdf::derive_sha256(
+    err = hkdf::derive_sha256(
         shared_secret,
         x25519_keypair_.public_key,  // Use our public key as salt
         std::as_bytes(std::span("psyfer-x25519-encrypt")),
@@ -249,7 +249,7 @@ result<std::vector<std::byte>> PsyferContext::decrypt_from(
     
     // Derive decryption key
     std::array<std::byte, 32> dec_key;
-    err = kdf::hkdf::derive_sha256(
+    err = hkdf::derive_sha256(
         shared_secret,
         sender_public_key,  // Use sender's public key as salt
         std::as_bytes(std::span("psyfer-x25519-encrypt")),
@@ -267,7 +267,7 @@ result<std::array<std::byte, 64>> PsyferContext::sign(
     std::span<const std::byte> message
 ) noexcept {
     std::array<std::byte, 64> signature;
-    auto err = crypto::ed25519::sign(message, ed25519_keypair_.private_key, signature);
+    auto err = ed25519::sign(message, ed25519_keypair_.private_key, signature);
     if (err) return std::unexpected(err);
     return signature;
 }
@@ -283,7 +283,7 @@ bool PsyferContext::verify(
     std::span<const std::byte, 64> signature,
     std::span<const std::byte, 32> public_key
 ) noexcept {
-    return crypto::ed25519::verify(message, signature, public_key);
+    return ed25519::verify(message, signature, public_key);
 }
 
 // ===== Message Authentication Implementation =====
@@ -292,7 +292,7 @@ std::array<std::byte, 32> PsyferContext::hmac256(
     std::span<const std::byte> message
 ) noexcept {
     std::array<std::byte, 32> mac;
-    hash::hmac_sha256::hmac(hmac_key_.span(), message, mac);
+    hmac_sha256_algorithm::hmac(hmac_key_.span(), message, mac);
     return mac;
 }
 
@@ -300,7 +300,7 @@ std::array<std::byte, 64> PsyferContext::hmac512(
     std::span<const std::byte> message
 ) noexcept {
     std::array<std::byte, 64> mac;
-    hash::hmac_sha512::hmac(hmac_key_.span(), message, mac);
+    hmac_sha512_algorithm::hmac(hmac_key_.span(), message, mac);
     return mac;
 }
 
@@ -309,17 +309,17 @@ bool PsyferContext::verify_hmac256(
     std::span<const std::byte, 32> mac
 ) noexcept {
     auto computed = hmac256(message);
-    return utils::secure_compare(computed.data(), mac.data(), 32);
+    return secure_compare(computed.data(), mac.data(), 32);
 }
 
 // ===== Key Derivation Implementation =====
 
-result<utils::secure_key_256> PsyferContext::derive_key(
+result<secure_key_256> PsyferContext::derive_key(
     std::string_view purpose,
     std::span<const std::byte> salt
 ) noexcept {
     std::array<std::byte, 32> derived;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = hkdf::derive_sha256(
         master_key_.span(),
         salt,
         std::as_bytes(std::span(purpose)),
@@ -327,11 +327,11 @@ result<utils::secure_key_256> PsyferContext::derive_key(
     );
     if (err) return std::unexpected(err);
     
-    return utils::secure_key_256::from_bytes(derived);
+    return secure_key_256::from_bytes(derived);
 }
 
 template<size_t KeySize>
-result<utils::secure_key<KeySize>> PsyferContext::derive_key_sized(
+result<secure_key<KeySize>> PsyferContext::derive_key_sized(
     std::string_view purpose,
     std::span<const std::byte> salt
 ) noexcept {
@@ -341,7 +341,7 @@ result<utils::secure_key<KeySize>> PsyferContext::derive_key_sized(
     std::error_code err;
     if (KeySize <= 32) {
         std::array<std::byte, 32> temp;
-        err = kdf::hkdf::derive_sha256(
+        err = hkdf::derive_sha256(
             master_key_.span(),
             salt,
             std::as_bytes(std::span(purpose)),
@@ -351,7 +351,7 @@ result<utils::secure_key<KeySize>> PsyferContext::derive_key_sized(
             std::memcpy(derived.data(), temp.data(), KeySize);
         }
     } else {
-        err = kdf::hkdf::derive_sha512(
+        err = hkdf::derive_sha512(
             master_key_.span(),
             salt,
             std::as_bytes(std::span(purpose)),
@@ -361,15 +361,15 @@ result<utils::secure_key<KeySize>> PsyferContext::derive_key_sized(
     
     if (err) return std::unexpected(err);
     
-    return utils::secure_key<KeySize>::from_bytes(derived);
+    return secure_key<KeySize>::from_bytes(derived);
 }
 
 // Explicit instantiations for common key sizes
-template result<utils::secure_key<16>> PsyferContext::derive_key_sized<16>(
+template result<secure_key<16>> PsyferContext::derive_key_sized<16>(
     std::string_view, std::span<const std::byte>) noexcept;
-template result<utils::secure_key<32>> PsyferContext::derive_key_sized<32>(
+template result<secure_key<32>> PsyferContext::derive_key_sized<32>(
     std::string_view, std::span<const std::byte>) noexcept;
-template result<utils::secure_key<64>> PsyferContext::derive_key_sized<64>(
+template result<secure_key<64>> PsyferContext::derive_key_sized<64>(
     std::string_view, std::span<const std::byte>) noexcept;
 
 // ===== Key Management Implementation =====
@@ -381,7 +381,7 @@ bool PsyferContext::needs_rotation() const noexcept {
 
 std::error_code PsyferContext::rotate_keys() noexcept {
     // Generate new master key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = secure_key_256::generate();
     if (!key_result) return key_result.error();
     
     // Clear old keys
@@ -408,7 +408,7 @@ result<std::unique_ptr<PsyferContext>> PsyferContext::load(
     if (!decrypted) return std::unexpected(decrypted.error());
     
     // Parse the decrypted data
-    serialization::BufferReader reader(*decrypted);
+    BufferReader reader(*decrypted);
     
     // Read version
     auto version = reader.read_u32();
@@ -441,7 +441,7 @@ result<std::unique_ptr<PsyferContext>> PsyferContext::load(
     if (master_key_data && master_key_data->size() == 32) {
         std::array<std::byte, 32> key_array;
         std::memcpy(key_array.data(), master_key_data->data(), 32);
-        ctx->master_key_ = utils::secure_key_256::from_bytes(key_array);
+        ctx->master_key_ = secure_key_256::from_bytes(key_array);
     }
     
     // Read X25519 keypair
@@ -449,7 +449,7 @@ result<std::unique_ptr<PsyferContext>> PsyferContext::load(
     if (x25519_private && x25519_private->size() == 32) {
         std::memcpy(ctx->x25519_keypair_.private_key.data(), 
                    x25519_private->data(), 32);
-        [[maybe_unused]] auto err = crypto::x25519::derive_public_key(
+        [[maybe_unused]] auto err = x25519::derive_public_key(
             ctx->x25519_keypair_.private_key,
             ctx->x25519_keypair_.public_key
         );
@@ -460,7 +460,7 @@ result<std::unique_ptr<PsyferContext>> PsyferContext::load(
     if (ed25519_private && ed25519_private->size() == 32) {
         std::memcpy(ctx->ed25519_keypair_.private_key.data(), 
                    ed25519_private->data(), 32);
-        crypto::ed25519::public_key_from_private(
+        ed25519::public_key_from_private(
             ctx->ed25519_keypair_.private_key,
             ctx->ed25519_keypair_.public_key
         );
@@ -480,34 +480,34 @@ result<std::vector<std::byte>> PsyferContext::save(
     std::vector<std::byte> buffer;
     buffer.reserve(512);  // Estimate
     
-    serialization::BufferWriter writer(buffer);
+    BufferWriter writer(buffer);
     
     // Write version
     writer.write_u32(1);
     
     // Write identity
-    writer.write_field_header(1, serialization::WireType::BYTES);
+    writer.write_field_header(1, WireType::BYTES);
     writer.write_string_field(identity_name_);
     
     // Write creation time
-    writer.write_field_header(2, serialization::WireType::FIXED64);
+    writer.write_field_header(2, WireType::FIXED64);
     writer.write_u64(std::chrono::duration_cast<std::chrono::seconds>(
         created_at_.time_since_epoch()).count());
     
     // Write rotation period
-    writer.write_field_header(3, serialization::WireType::FIXED64);
+    writer.write_field_header(3, WireType::FIXED64);
     writer.write_u64(rotation_period_.count());
     
     // Write master key
-    writer.write_field_header(4, serialization::WireType::BYTES);
+    writer.write_field_header(4, WireType::BYTES);
     writer.write_bytes_field(master_key_.span());
     
     // Write X25519 private key
-    writer.write_field_header(5, serialization::WireType::BYTES);
+    writer.write_field_header(5, WireType::BYTES);
     writer.write_bytes_field(x25519_keypair_.private_key);
     
     // Write Ed25519 private key
-    writer.write_field_header(6, serialization::WireType::BYTES);
+    writer.write_field_header(6, WireType::BYTES);
     writer.write_bytes_field(ed25519_keypair_.private_key);
     
     buffer.resize(writer.position());

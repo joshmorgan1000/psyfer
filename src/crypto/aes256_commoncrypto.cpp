@@ -9,7 +9,7 @@
 #include <CommonCrypto/CommonCryptor.h>
 #include <CommonCrypto/CommonCrypto.h>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 /**
  * @brief Check if CommonCrypto is available (always true on Apple platforms)
@@ -111,6 +111,6 @@ public:
     }
 };
 
-} // namespace psyfer::crypto
+} // namespace psyfer
 
 #endif // __APPLE__

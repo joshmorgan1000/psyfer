@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <array>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 // Ed25519 uses the twisted Edwards curve -x^2 + y^2 = 1 + dx^2y^2
 // over GF(2^255 - 19) with d = -121665/121666
@@ -968,4 +968,4 @@ void ge_tobytes(uint8_t* s, const ge_p2* h) {
     s[31] ^= fe_isnegative(x) << 7;
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

@@ -83,13 +83,13 @@ static uint64_t sigma0_512(uint64_t x) { return rotr(x, 1) ^ rotr(x, 8) ^ (x >> 
 static uint64_t sigma1_512(uint64_t x) { return rotr(x, 19) ^ rotr(x, 61) ^ (x >> 6); }
 #endif
 
-namespace psyfer::hash {
+namespace psyfer {
 
 // ────────────────────────────────────────────────────────────────────────────
 // SHA-256 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class sha256::impl {
+class sha256_hasher::impl {
 public:
 #ifdef __APPLE__
     CC_SHA256_CTX ctx;
@@ -251,24 +251,24 @@ public:
 #endif
 };
 
-sha256::sha256() noexcept : pimpl(std::make_unique<impl>()) {}
+sha256_hasher::sha256_hasher() noexcept : pimpl(std::make_unique<impl>()) {}
 
-sha256::~sha256() = default;
+sha256_hasher::~sha256_hasher() = default;
 
-void sha256::update(std::span<const std::byte> data) noexcept {
+void sha256_hasher::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void sha256::finalize(std::span<std::byte> output) noexcept {
+void sha256_hasher::finalize(std::span<std::byte> output) noexcept {
     if (output.size() < 32) return;
     pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
 }
 
-void sha256::reset() noexcept {
+void sha256_hasher::reset() noexcept {
     pimpl->reset();
 }
 
-void sha256::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
+void sha256_hasher::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
     if (output.size() < 32) return;
     
 #ifdef __APPLE__
@@ -278,7 +278,7 @@ void sha256::hash(std::span<const std::byte> input, std::span<std::byte> output)
         reinterpret_cast<uint8_t*>(output.data())
     );
 #else
-    sha256 hasher;
+    sha256_hasher hasher;
     hasher.update(input);
     hasher.finalize(output);
 #endif
@@ -288,7 +288,7 @@ void sha256::hash(std::span<const std::byte> input, std::span<std::byte> output)
 // SHA-512 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class sha512::impl {
+class sha512_hasher::impl {
 public:
 #ifdef __APPLE__
     CC_SHA512_CTX ctx;
@@ -468,24 +468,24 @@ public:
 #endif
 };
 
-sha512::sha512() noexcept : pimpl(std::make_unique<impl>()) {}
+sha512_hasher::sha512_hasher() noexcept : pimpl(std::make_unique<impl>()) {}
 
-sha512::~sha512() = default;
+sha512_hasher::~sha512_hasher() = default;
 
-void sha512::update(std::span<const std::byte> data) noexcept {
+void sha512_hasher::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void sha512::finalize(std::span<std::byte> output) noexcept {
+void sha512_hasher::finalize(std::span<std::byte> output) noexcept {
     if (output.size() < 64) return;
     pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
 }
 
-void sha512::reset() noexcept {
+void sha512_hasher::reset() noexcept {
     pimpl->reset();
 }
 
-void sha512::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
+void sha512_hasher::hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept {
     if (output.size() < 64) return;
     
 #ifdef __APPLE__
@@ -495,7 +495,7 @@ void sha512::hash(std::span<const std::byte> input, std::span<std::byte> output)
         reinterpret_cast<uint8_t*>(output.data())
     );
 #else
-    sha512 hasher;
+    sha512_hasher hasher;
     hasher.update(input);
     hasher.finalize(output);
 #endif
@@ -505,7 +505,7 @@ void sha512::hash(std::span<const std::byte> input, std::span<std::byte> output)
 // HMAC-SHA256 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class hmac_sha256::impl {
+class hmac_sha256_algorithm::impl {
 public:
 #ifdef __APPLE__
     CCHmacContext ctx;
@@ -536,10 +536,10 @@ public:
     }
 #endif
     
-    utils::secure_vector<std::byte> key_copy;
+    secure_vector<std::byte> key_copy;
 };
 
-hmac_sha256::hmac_sha256(std::span<const std::byte> key) noexcept 
+hmac_sha256_algorithm::hmac_sha256_algorithm(std::span<const std::byte> key) noexcept 
     : pimpl(std::make_unique<impl>()) {
     pimpl->key_copy.reserve(key.size());
     pimpl->key_copy.insert(pimpl->key_copy.end(), key.begin(), key.end());
@@ -548,22 +548,22 @@ hmac_sha256::hmac_sha256(std::span<const std::byte> key) noexcept
         reinterpret_cast<const uint8_t*>(key.data()), 
         key.size()
     );
-    pimpl->key_copy = utils::secure_vector<std::byte>(key.begin(), key.end());
+    pimpl->key_copy = secure_vector<std::byte>(key.begin(), key.end());
 #endif
 }
 
-hmac_sha256::~hmac_sha256() = default;
+hmac_sha256_algorithm::~hmac_sha256_algorithm() = default;
 
-void hmac_sha256::update(std::span<const std::byte> data) noexcept {
+void hmac_sha256_algorithm::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void hmac_sha256::finalize(std::span<std::byte> output) noexcept {
+void hmac_sha256_algorithm::finalize(std::span<std::byte> output) noexcept {
     if (output.size() < 32) return;
     pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
 }
 
-void hmac_sha256::reset() noexcept {
+void hmac_sha256_algorithm::reset() noexcept {
 #ifdef __APPLE__
     pimpl->reset(
         reinterpret_cast<const uint8_t*>(pimpl->key_copy.data()),
@@ -572,7 +572,7 @@ void hmac_sha256::reset() noexcept {
 #endif
 }
 
-void hmac_sha256::hmac(
+void hmac_sha256_algorithm::hmac(
     std::span<const std::byte> key,
     std::span<const std::byte> input,
     std::span<std::byte> output
@@ -593,7 +593,7 @@ void hmac_sha256::hmac(
 // HMAC-SHA512 implementation
 // ────────────────────────────────────────────────────────────────────────────
 
-class hmac_sha512::impl {
+class hmac_sha512_algorithm::impl {
 public:
 #ifdef __APPLE__
     CCHmacContext ctx;
@@ -624,10 +624,10 @@ public:
     }
 #endif
     
-    utils::secure_vector<std::byte> key_copy;
+    secure_vector<std::byte> key_copy;
 };
 
-hmac_sha512::hmac_sha512(std::span<const std::byte> key) noexcept 
+hmac_sha512_algorithm::hmac_sha512_algorithm(std::span<const std::byte> key) noexcept 
     : pimpl(std::make_unique<impl>()) {
     pimpl->key_copy.reserve(key.size());
     pimpl->key_copy.insert(pimpl->key_copy.end(), key.begin(), key.end());
@@ -636,22 +636,22 @@ hmac_sha512::hmac_sha512(std::span<const std::byte> key) noexcept
         reinterpret_cast<const uint8_t*>(key.data()), 
         key.size()
     );
-    pimpl->key_copy = utils::secure_vector<std::byte>(key.begin(), key.end());
+    pimpl->key_copy = secure_vector<std::byte>(key.begin(), key.end());
 #endif
 }
 
-hmac_sha512::~hmac_sha512() = default;
+hmac_sha512_algorithm::~hmac_sha512_algorithm() = default;
 
-void hmac_sha512::update(std::span<const std::byte> data) noexcept {
+void hmac_sha512_algorithm::update(std::span<const std::byte> data) noexcept {
     pimpl->update(reinterpret_cast<const uint8_t*>(data.data()), data.size());
 }
 
-void hmac_sha512::finalize(std::span<std::byte> output) noexcept {
+void hmac_sha512_algorithm::finalize(std::span<std::byte> output) noexcept {
     if (output.size() < 64) return;
     pimpl->finalize(reinterpret_cast<uint8_t*>(output.data()));
 }
 
-void hmac_sha512::reset() noexcept {
+void hmac_sha512_algorithm::reset() noexcept {
 #ifdef __APPLE__
     pimpl->reset(
         reinterpret_cast<const uint8_t*>(pimpl->key_copy.data()),
@@ -660,7 +660,7 @@ void hmac_sha512::reset() noexcept {
 #endif
 }
 
-void hmac_sha512::hmac(
+void hmac_sha512_algorithm::hmac(
     std::span<const std::byte> key,
     std::span<const std::byte> input,
     std::span<std::byte> output
@@ -677,4 +677,4 @@ void hmac_sha512::hmac(
 #endif
 }
 
-} // namespace psyfer::hash
+} // namespace psyfer

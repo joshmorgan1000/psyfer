@@ -8,7 +8,7 @@
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 /**
  * @brief NEON-optimized field multiplication
@@ -57,6 +57,6 @@ public:
     }
 };
 
-} // namespace psyfer::crypto
+} // namespace psyfer
 
 #endif // __ARM_NEON

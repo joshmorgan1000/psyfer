@@ -80,7 +80,7 @@ void test_aes128_ecb() {
         }
         
         // Test encryption
-        psyfer::crypto::aes128 cipher(key);
+        psyfer::aes128 cipher(key);
         std::array<std::byte, 16> ciphertext = plaintext;
         cipher.encrypt_block(ciphertext);
         
@@ -133,7 +133,7 @@ void test_aes256_ecb() {
         }
         
         // Test encryption
-        psyfer::crypto::aes256 cipher(key);
+        psyfer::aes256 cipher(key);
         std::array<std::byte, 16> ciphertext = plaintext;
         cipher.encrypt_block(ciphertext);
         
@@ -182,7 +182,7 @@ void test_cbc_mode() {
     }
     
     // Manual CBC encryption
-    psyfer::crypto::aes128 cipher(key);
+    psyfer::aes128 cipher(key);
     std::vector<std::byte> ciphertext = plaintext;
     std::array<std::byte, 16> prev_block = iv;
     
@@ -257,7 +257,7 @@ void test_ctr_mode() {
     }
     
     // Manual CTR encryption
-    psyfer::crypto::aes128 cipher(key);
+    psyfer::aes128 cipher(key);
     std::vector<std::byte> ciphertext = plaintext;
     
     uint32_t counter = 0;
@@ -327,7 +327,7 @@ void test_edge_cases() {
         test_data[i] = static_cast<std::byte>(i);
     }
     
-    psyfer::crypto::aes128 zero_cipher(zero_key);
+    psyfer::aes128 zero_cipher(zero_key);
     std::array<std::byte, 16> encrypted = test_data;
     zero_cipher.encrypt_block(encrypted);
     zero_cipher.decrypt_block(encrypted);
@@ -343,7 +343,7 @@ void test_edge_cases() {
     std::array<std::byte, 16> one_key;
     std::fill(one_key.begin(), one_key.end(), std::byte{0xFF});
     
-    psyfer::crypto::aes128 one_cipher(one_key);
+    psyfer::aes128 one_cipher(one_key);
     encrypted = test_data;
     one_cipher.encrypt_block(encrypted);
     one_cipher.decrypt_block(encrypted);
@@ -370,7 +370,7 @@ void test_edge_cases() {
             plaintext[j] = static_cast<std::byte>(dis(gen));
         }
         
-        psyfer::crypto::aes128 cipher(key);
+        psyfer::aes128 cipher(key);
         std::array<std::byte, 16> ciphertext = plaintext;
         cipher.encrypt_block(ciphertext);
         cipher.decrypt_block(ciphertext);
@@ -399,7 +399,7 @@ void test_actual_encryption() {
         plaintext[i] = static_cast<std::byte>(i * 2);
     }
     
-    psyfer::crypto::aes128 cipher(key);
+    psyfer::aes128 cipher(key);
     std::array<std::byte, 16> ciphertext = plaintext;
     cipher.encrypt_block(ciphertext);
     
@@ -425,7 +425,7 @@ void test_actual_encryption() {
         key2[i] = static_cast<std::byte>(i + 1);
     }
     
-    psyfer::crypto::aes128 cipher2(key2);
+    psyfer::aes128 cipher2(key2);
     std::array<std::byte, 16> ciphertext2 = plaintext;
     cipher2.encrypt_block(ciphertext2);
     

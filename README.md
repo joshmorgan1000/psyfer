@@ -33,7 +33,7 @@ A modern, blazing-fast, and easy-to-use encryption library with built-in compres
 using namespace psyfer;
 
 // Create a secure key
-auto key = crypto::secure_key::generate();
+auto key = secure_generate();
 
 // Initialize AES-256-GCM cipher
 crypto::aes256 cipher(key.span());
@@ -42,7 +42,7 @@ crypto::aes256 cipher(key.span());
 std::vector<std::byte> plaintext = /* your data */;
 std::array<std::byte, 12> nonce{};
 std::array<std::byte, 16> tag{};
-utils::secure_random::generate(nonce);
+secure_generate(nonce);
 
 crypto::aes256_gcm gcm(cipher);
 gcm.encrypt(plaintext, nonce, tag);

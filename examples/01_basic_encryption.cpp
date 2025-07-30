@@ -25,7 +25,7 @@ void example_aes256_gcm() {
     
     // Step 1: Generate a secure random key
     // In production, you might derive this from a password or load from secure storage
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key: " << key_result.error().message() << "\n";
         return;
@@ -35,7 +35,7 @@ void example_aes256_gcm() {
     // Step 2: Generate a unique nonce (number used once)
     // CRITICAL: Never reuse a nonce with the same key!
     std::array<std::byte, 12> nonce;  // 96-bit nonce for GCM
-    auto nonce_err = utils::secure_random::generate(nonce);
+    auto nonce_err = secure_random::generate(nonce);
     if (nonce_err) {
         std::cerr << "Failed to generate nonce: " << nonce_err.message() << "\n";
         return;
@@ -52,7 +52,7 @@ void example_aes256_gcm() {
     std::cout << "Size: " << data.size() << " bytes\n";
     
     // Step 4: Create cipher instance and encrypt in-place
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     std::array<std::byte, 16> tag;  // 128-bit authentication tag
     
     auto encrypt_err = cipher.encrypt(data, key.span(), nonce, tag);
@@ -93,12 +93,12 @@ void example_chacha20_poly1305() {
     // - Consistent performance across platforms
     
     // Generate key and nonce
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     // Prepare data
     std::string message = "ChaCha20-Poly1305 is a modern AEAD cipher!";
@@ -108,7 +108,7 @@ void example_chacha20_poly1305() {
     );
     
     // Encrypt
-    crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     std::array<std::byte, 16> tag;
     
     auto err = cipher.encrypt(data, key.span(), nonce, tag);
@@ -140,12 +140,12 @@ void example_aead_with_aad() {
     // Common uses: headers, metadata, routing information
     
     // Setup
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     // Message and metadata
     std::string secret_message = "Transfer $1000 to account 12345";
@@ -164,7 +164,7 @@ void example_aead_with_aad() {
     std::cout << "Metadata (authenticated only): " << metadata << "\n";
     
     // Encrypt with AAD
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     std::array<std::byte, 16> tag;
     
     auto err = cipher.encrypt(message_bytes, key.span(), nonce, tag, aad_bytes);
@@ -212,11 +212,11 @@ void example_aead_with_aad() {
 void example_different_data_types() {
     std::cout << "\n=== Example 4: Encrypting Different Data Types ===\n";
     
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) return;
     auto key = std::move(key_result.value());
     
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     
     // Example 4a: Binary data
     {
@@ -229,7 +229,7 @@ void example_different_data_types() {
         
         std::array<std::byte, 12> nonce;
         std::array<std::byte, 16> tag;
-        utils::secure_random::generate(nonce);
+        secure_random::generate(nonce);
         
         cipher.encrypt(data, key.span(), nonce, tag);
         std::cout << "Encrypted " << data.size() << " bytes of binary data\n";
@@ -252,7 +252,7 @@ void example_different_data_types() {
         
         std::array<std::byte, 12> nonce;
         std::array<std::byte, 16> tag;
-        utils::secure_random::generate(nonce);
+        secure_random::generate(nonce);
         
         cipher.encrypt(data, key.span(), nonce, tag);
         std::cout << "Encrypted struct (" << sizeof(Record) << " bytes)\n";

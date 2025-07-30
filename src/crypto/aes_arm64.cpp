@@ -12,7 +12,7 @@
 #endif
 #endif
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 #ifdef __aarch64__
 #ifdef __ARM_FEATURE_CRYPTO
@@ -192,4 +192,4 @@ bool aes_arm64_available() {
 #endif // __ARM_FEATURE_CRYPTO
 #endif // __aarch64__
 
-} // namespace psyfer::crypto
+} // namespace psyfer

@@ -6,7 +6,7 @@
 #include <psyfer.hpp>
 #include <cstring>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 // AES S-box (same as AES-256)
 constexpr uint8_t sbox[256] = {
@@ -346,4 +346,4 @@ void aes128_decrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept {
 }
 #endif
 
-} // namespace psyfer::crypto
+} // namespace psyfer

@@ -5,7 +5,7 @@
 
 #include <psyfer.hpp>
 
-namespace psyfer::utils {
+namespace psyfer {
 
 // Key derivation from password using SHA-256
 template<size_t KeySize>
@@ -24,7 +24,7 @@ result<secure_key<KeySize>> secure_key<KeySize>::from_password(
     
     // Initial hash: SHA-256(password || salt)
     {
-        hash::sha256 hasher;
+        sha256_hasher hasher;
         hasher.update(std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(password.data()),
             password.size()
@@ -36,7 +36,7 @@ result<secure_key<KeySize>> secure_key<KeySize>::from_password(
     // Iterate
     for (uint32_t i = 0; i < iterations; ++i) {
         // Use HMAC-SHA256 for key derivation iterations
-        hash::hmac_sha256::hmac(derived.span(), 
+        hmac_sha256_algorithm::hmac(derived.span(), 
             std::span<const std::byte>(
                 reinterpret_cast<const std::byte*>(&i),
                 sizeof(i)
@@ -60,7 +60,7 @@ result<secure_key<KeySize>> secure_key<KeySize>::from_password(
         uint32_t counter = 0;
         
         while (offset < KeySize) {
-            hash::sha256 hasher;
+            sha256_hasher hasher;
             hasher.update(derived.span());
             hasher.update(std::span<const std::byte>(
                 reinterpret_cast<const std::byte*>(&counter),
@@ -110,7 +110,7 @@ result<secure_vector<std::byte>> secure_key<KeySize>::export_protected(
     
     // Encrypt in place
     std::array<std::byte, 16> tag;
-    auto ec = crypto::aes256_gcm::encrypt_oneshot(
+    auto ec = aes256_gcm::encrypt_oneshot(
         std::span<std::byte>(output.data() + 12, KeySize),
         protection_key,
         nonce_result.value(),
@@ -151,7 +151,7 @@ result<secure_key<KeySize>> secure_key<KeySize>::import_protected(
     std::memcpy(key_data.data(), encrypted_data.data() + 12, KeySize);
     
     // Decrypt
-    auto ec = crypto::aes256_gcm::decrypt_oneshot(
+    auto ec = aes256_gcm::decrypt_oneshot(
         key_data.span(),
         protection_key,
         nonce,
@@ -176,4 +176,4 @@ template class secure_key<64>;
 template class secure_key<128>;
 template class secure_key<256>;
 
-} // namespace psyfer::utils
+} // namespace psyfer

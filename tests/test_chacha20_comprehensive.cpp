@@ -148,7 +148,7 @@ void test_chacha20() {
         }
         
         // Encrypt
-        psyfer::crypto::chacha20::crypt(data, key, nonce, test.counter);
+        psyfer::chacha20::crypt(data, key, nonce, test.counter);
         
         // Check ciphertext
         bool match = true;
@@ -171,7 +171,7 @@ void test_chacha20() {
         }
         
         // Decrypt (ChaCha20 is symmetric)
-        psyfer::crypto::chacha20::crypt(data, key, nonce, test.counter);
+        psyfer::chacha20::crypt(data, key, nonce, test.counter);
         
         // Check plaintext
         match = true;
@@ -200,7 +200,7 @@ void test_chacha20_poly1305() {
     std::cout << "\n=== Testing ChaCha20-Poly1305 AEAD ===" << std::endl;
     
     bool all_passed = true;
-    psyfer::crypto::chacha20_poly1305 aead;
+    psyfer::chacha20_poly1305 aead;
     
     for (const auto& test : chacha20_poly1305_test_vectors) {
         std::cout << test.description << ": ";
@@ -306,7 +306,7 @@ void test_chacha20_poly1305() {
 void test_authentication() {
     std::cout << "\n=== Testing Authentication Properties ===" << std::endl;
     
-    psyfer::crypto::chacha20_poly1305 aead;
+    psyfer::chacha20_poly1305 aead;
     
     // Generate test key and nonce
     std::array<std::byte, 32> key;
@@ -408,7 +408,7 @@ void test_authentication() {
 void test_edge_cases() {
     std::cout << "\n=== Testing Edge Cases ===" << std::endl;
     
-    psyfer::crypto::chacha20_poly1305 aead;
+    psyfer::chacha20_poly1305 aead;
     std::array<std::byte, 32> key{};
     std::array<std::byte, 12> nonce{};
     std::array<std::byte, 16> tag;
@@ -491,7 +491,7 @@ void test_actual_encryption() {
     // ChaCha20 encryption
     std::cout << "ChaCha20 produces different output: ";
     std::vector<std::byte> ciphertext = plaintext;
-    psyfer::crypto::chacha20::crypt(ciphertext, key, nonce);
+    psyfer::chacha20::crypt(ciphertext, key, nonce);
     
     bool different = false;
     for (size_t i = 0; i < plaintext.size(); ++i) {
@@ -509,7 +509,7 @@ void test_actual_encryption() {
     
     // ChaCha20-Poly1305 encryption
     std::cout << "ChaCha20-Poly1305 produces different output: ";
-    psyfer::crypto::chacha20_poly1305 aead;
+    psyfer::chacha20_poly1305 aead;
     std::array<std::byte, 16> tag;
     
     ciphertext = plaintext;

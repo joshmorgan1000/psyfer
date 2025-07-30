@@ -7,6 +7,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Add goldenhash submodule
 add_subdirectory(goldenhash)
 
+# Add inkpacket submodule
+add_subdirectory(inkpacket)
+
 add_library(psyfer
     STATIC
     src/logger/logger.cpp
@@ -79,7 +82,7 @@ install(TARGETS psyfer ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install ink packet headers
-#install(DIRECTORY ink_packet/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY inkpacket/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/psyfer-config.cmake.in
@@ -120,7 +123,7 @@ message(STATUS "    _____  _______ __   __ _______ _______  ______")
 message(STATUS "   |_____] |______   \\_/   |______ |______ |_____/")
 message(STATUS "   |       ______|    |    |       |______ |    \\_")
 message(STATUS "──────────────────────────────────────────────────────")
-message(STATUS "  Psyfer Encryption Library configured:")
-message(STATUS "    Version: ${PROJECT_VERSION}")
-message(STATUS "    C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "   Psyfer Encryption Library configured:")
+message(STATUS "        Version: ${PROJECT_VERSION}")
+message(STATUS "        C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "─────────────────────────────────────────────────────")

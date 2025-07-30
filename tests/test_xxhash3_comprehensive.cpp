@@ -36,7 +36,7 @@ std::vector<std::byte> to_bytes(const std::string& str) {
 
 // Test xxHash3-24
 bool test_xxhash3_24() {
-    std::log_info("\n=== xxHash3-24 Tests ===");
+    std::cout << "\n=== xxHash3-24 Tests ===" << std::endl;
     
     std::vector<XXHash3TestVector> vectors = {
         {
@@ -84,19 +84,19 @@ bool test_xxhash3_24() {
     bool all_passed = true;
     
     for (const auto& tv : vectors) {
-        std::log_info("\nTesting: \"{}\"", tv.description);
+        std::cout << std::format("\nTesting: '{}'", tv.description) << std::endl;
         
         auto data = to_bytes(tv.input);
-        uint32_t computed = psyfer::hash::xxhash3_24::hash(data);
+        uint32_t computed = psyfer::xxhash3_24::hash(data);
         
-        std::log_info("Computed: 0x{:06x}", computed);
+        std::cout << std::format(" Computed: 0x{:06x}", computed) << std::endl;
         
         if (tv.expected_xxh3_24 != 0) {
-            std::log_info("Expected: 0x{:06x}", tv.expected_xxh3_24);
+            std::cout << std::format(" Expected: 0x{:06x}", tv.expected_xxh3_24) << std::endl;
             if (computed == tv.expected_xxh3_24) {
-                std::log_info("Result: PASS");
+                std::cout << " Result: PASS" << std::endl;
             } else {
-                std::log_info("Result: FAIL");
+                std::cout << " Result: FAIL" << std::endl;
                 all_passed = false;
             }
         }
@@ -107,7 +107,7 @@ bool test_xxhash3_24() {
 
 // Test xxHash3-32
 bool test_xxhash3_32() {
-    std::log_info("\n=== xxHash3-32 Tests ===");
+    std::cout << "\n=== xxHash3-32 Tests ===" << std::endl;
     
     std::vector<XXHash3TestVector> vectors = {
         {
@@ -155,19 +155,19 @@ bool test_xxhash3_32() {
     bool all_passed = true;
     
     for (const auto& tv : vectors) {
-        std::log_info("\n{}:", tv.description);
-        std::log_info("Data size: {} bytes", tv.input.size());
+        std::cout << std::format("\n{}:", tv.description) << std::endl;
+        std::cout << std::format(" Data size: {} bytes", tv.input.size()) << std::endl;
         
         auto data = to_bytes(tv.input);
-        uint32_t computed = psyfer::hash::xxhash3_32::hash(data);
+        uint32_t computed = psyfer::xxhash3_32::hash(data);
         
-        std::log_info("Computed: 0x{:08x}", computed);
+        std::cout << std::format(" Computed: 0x{:08x}", computed) << std::endl;
         if (tv.expected_xxh3_32 != 0) {
-            std::log_info("Expected: 0x{:08x}", tv.expected_xxh3_32);
+            std::cout << std::format(" Expected: 0x{:08x}", tv.expected_xxh3_32) << std::endl;
             if (computed == tv.expected_xxh3_32) {
-                std::log_info("Result: PASS");
+                std::cout << " Result: PASS" << std::endl;
             } else {
-                std::log_info("Result: FAIL");
+                std::cout << " Result: FAIL" << std::endl;
                 all_passed = false;
             }
         }
@@ -178,7 +178,7 @@ bool test_xxhash3_32() {
 
 // Test xxHash3-64
 bool test_xxhash3_64() {
-    std::log_info("\n=== xxHash3-64 Tests ===");
+    std::cout << "\n=== xxHash3-64 Tests ===" << std::endl;
     
     std::vector<XXHash3TestVector> vectors = {
         {
@@ -210,18 +210,18 @@ bool test_xxhash3_64() {
     bool all_passed = true;
     
     for (const auto& tv : vectors) {
-        std::log_info("\n{}:", tv.description);
+        std::cout << std::format("\n{}:", tv.description) << std::endl;
         
         auto data = to_bytes(tv.input);
-        uint64_t computed = psyfer::hash::xxhash3_64::hash(data);
+        uint64_t computed = psyfer::xxhash3_64::hash(data);
         
-        std::log_info("Computed: 0x{:016x}", computed);
-        std::log_info("Expected: 0x{:016x}", tv.expected_xxh3_64);
+        std::cout << std::format(" Computed: 0x{:016x}", computed) << std::endl;
+        std::cout << std::format(" Expected: 0x{:016x}", tv.expected_xxh3_64) << std::endl;
         
         if (computed == tv.expected_xxh3_64) {
-            std::log_info("Result: PASS");
+            std::cout << "Result: PASS";
         } else {
-            std::log_info("Result: FAIL");
+            std::cout << "Result: FAIL";
             all_passed = false;
         }
     }
@@ -231,7 +231,7 @@ bool test_xxhash3_64() {
 
 // Test xxHash3-128
 bool test_xxhash3_128() {
-    std::log_info("\n=== xxHash3-128 Tests ===");
+    std::cout << "\n=== xxHash3-128 Tests ===" << std::endl;
     
     std::vector<XXHash3TestVector> vectors = {
         {
@@ -255,18 +255,18 @@ bool test_xxhash3_128() {
     bool all_passed = true;
     
     for (const auto& tv : vectors) {
-        std::log_info("\n{}:", tv.description);
+        std::cout << std::format("\n{}:", tv.description) << std::endl;
         
         auto data = to_bytes(tv.input);
-        auto computed = psyfer::hash::xxhash3_128::hash(data);
+        auto computed = psyfer::xxhash3_128::hash(data);
         
-        std::log_info("Computed: 0x{:016x}{:016x}", computed.high, computed.low);
-        std::log_info("Expected: 0x{:016x}{:016x}", tv.expected_xxh3_128[1], tv.expected_xxh3_128[0]);
+        std::cout << std::format(" Computed: 0x{:016x}{:016x}", computed.high, computed.low) << std::endl;
+        std::cout << std::format(" Expected: 0x{:016x}{:016x}", tv.expected_xxh3_128[1], tv.expected_xxh3_128[0]) << std::endl;
         
         if (computed.low == tv.expected_xxh3_128[0] && computed.high == tv.expected_xxh3_128[1]) {
-            std::log_info("Result: PASS");
+            std::cout << "Result: PASS";
         } else {
-            std::log_info("Result: FAIL");
+            std::cout << "Result: FAIL";
             all_passed = false;
         }
     }
@@ -276,48 +276,48 @@ bool test_xxhash3_128() {
 
 // Test xxHash3 consistency
 bool test_xxhash3_consistency() {
-    std::log_info("\n=== xxHash3 Consistency Tests ===");
+    std::cout << "\n=== xxHash3 Consistency Tests ===" << std::endl;
     
     // Test that the same input always produces the same hash
     std::string test_data = "The quick brown fox jumps over the lazy dog";
     auto data = to_bytes(test_data);
     
-    uint32_t hash24_1 = psyfer::hash::xxhash3_24::hash(data);
-    uint32_t hash24_2 = psyfer::hash::xxhash3_24::hash(data);
+    uint32_t hash24_1 = psyfer::xxhash3_24::hash(data);
+    uint32_t hash24_2 = psyfer::xxhash3_24::hash(data);
     
-    std::log_info("xxHash3-24 consistency: {} (hash: 0x{:06x})",
-                  (hash24_1 == hash24_2) ? "PASS" : "FAIL", hash24_1);
+    std::cout << std::format("\nxxHash3-24 consistency: {} (hash: 0x{:06x})",
+                  (hash24_1 == hash24_2) ? "PASS" : "FAIL", hash24_1) << std::endl;
     
-    uint32_t hash32_1 = psyfer::hash::xxhash3_32::hash(data);
-    uint32_t hash32_2 = psyfer::hash::xxhash3_32::hash(data);
+    uint32_t hash32_1 = psyfer::xxhash3_32::hash(data);
+    uint32_t hash32_2 = psyfer::xxhash3_32::hash(data);
     
-    std::log_info("xxHash3-32 consistency: {} (hash: 0x{:08x})",
-                  (hash32_1 == hash32_2) ? "PASS" : "FAIL", hash32_1);
+    std::cout << std::format("\nxxHash3-32 consistency: {} (hash: 0x{:08x})",
+                  (hash32_1 == hash32_2) ? "PASS" : "FAIL", hash32_1) << std::endl;
     
-    uint64_t hash64_1 = psyfer::hash::xxhash3_64::hash(data);
-    uint64_t hash64_2 = psyfer::hash::xxhash3_64::hash(data);
+    uint64_t hash64_1 = psyfer::xxhash3_64::hash(data);
+    uint64_t hash64_2 = psyfer::xxhash3_64::hash(data);
     
-    std::log_info("xxHash3-64 consistency: {} (hash: 0x{:016x})",
-                  (hash64_1 == hash64_2) ? "PASS" : "FAIL", hash64_1);
+    std::cout << std::format("\nxxHash3-64 consistency: {} (hash: 0x{:016x})",
+                  (hash64_1 == hash64_2) ? "PASS" : "FAIL", hash64_1) << std::endl;
     
-    auto hash128_1 = psyfer::hash::xxhash3_128::hash(data);
-    auto hash128_2 = psyfer::hash::xxhash3_128::hash(data);
+    auto hash128_1 = psyfer::xxhash3_128::hash(data);
+    auto hash128_2 = psyfer::xxhash3_128::hash(data);
     
-    std::log_info("xxHash3-128 consistency: {} (hash: 0x{:016x}{:016x})",
+    std::cout << std::format("\nxxHash3-128 consistency: {} (hash: 0x{:016x}{:016x})",
                   (hash128_1.low == hash128_2.low && hash128_1.high == hash128_2.high) ? "PASS" : "FAIL",
-                  hash128_1.high, hash128_1.low);
+                  hash128_1.high, hash128_1.low) << std::endl;
     
     return true;
 }
 
 // Test xxHash3 avalanche effect
 bool test_xxhash3_avalanche() {
-    std::log_info("\n=== xxHash3 Avalanche Effect ===");
+    std::cout << "\n=== xxHash3 Avalanche Effect ===" << std::endl;
     
     // Test that changing one bit produces very different hash
     std::vector<std::byte> data1(1024);
     std::vector<std::byte> data2(1024);
-    psyfer::utils::secure_random::generate(data1);
+    psyfer::secure_random::generate(data1);
     std::memcpy(data2.data(), data1.data(), 1024);
     
     // Flip one bit
@@ -325,59 +325,59 @@ bool test_xxhash3_avalanche() {
     
     // xxHash3-24 avalanche
     {
-        uint32_t hash1 = psyfer::hash::xxhash3_24::hash(data1);
-        uint32_t hash2 = psyfer::hash::xxhash3_24::hash(data2);
+        uint32_t hash1 = psyfer::xxhash3_24::hash(data1);
+        uint32_t hash2 = psyfer::xxhash3_24::hash(data2);
         
         uint32_t diff = hash1 ^ hash2;
         int bits_changed = std::popcount(diff);
         
-        std::log_info("\nxxHash3-24 avalanche test:");
-        std::log_info("Input difference: 1 bit");
-        std::log_info("Output difference: {} bits (out of 24)", bits_changed);
-        std::log_info("Avalanche effect: {:.4}%", (bits_changed * 100.0) / 24.0);
+        std::cout << "\nxxHash3-24 avalanche test:" << std::endl;
+        std::cout << "Input difference: 1 bit" << std::endl;
+        std::cout << std::format(" Output difference: {} bits (out of 24)", bits_changed) << std::endl;
+        std::cout << std::format(" Avalanche effect: {:.4}%", (bits_changed * 100.0) / 24.0) << std::endl;
     }
     
     // xxHash3-32 avalanche
     {
-        uint32_t hash1 = psyfer::hash::xxhash3_32::hash(data1);
-        uint32_t hash2 = psyfer::hash::xxhash3_32::hash(data2);
+        uint32_t hash1 = psyfer::xxhash3_32::hash(data1);
+        uint32_t hash2 = psyfer::xxhash3_32::hash(data2);
         
         uint32_t diff = hash1 ^ hash2;
         int bits_changed = std::popcount(diff);
         
-        std::log_info("\nxxHash3-32 avalanche test:");
-        std::log_info("Input difference: 1 bit");
-        std::log_info("Output difference: {} bits (out of 32)", bits_changed);
-        std::log_info("Avalanche effect: {:.4}%", (bits_changed * 100.0) / 32.0);
+        std::cout << "\nxxHash3-32 avalanche test:" << std::endl;
+        std::cout << "Input difference: 1 bit" << std::endl;
+        std::cout << std::format(" Output difference: {} bits (out of 32)", bits_changed) << std::endl;
+        std::cout << std::format(" Avalanche effect: {:.4}%", (bits_changed * 100.0) / 32.0) << std::endl;
     }
     
     // xxHash3-64 avalanche
     {
-        uint64_t hash1 = psyfer::hash::xxhash3_64::hash(data1);
-        uint64_t hash2 = psyfer::hash::xxhash3_64::hash(data2);
+        uint64_t hash1 = psyfer::xxhash3_64::hash(data1);
+        uint64_t hash2 = psyfer::xxhash3_64::hash(data2);
         
         uint64_t diff = hash1 ^ hash2;
         int bits_changed = std::popcount(diff);
         
-        std::log_info("\nxxHash3-64 avalanche test:");
-        std::log_info("Input difference: 1 bit");
-        std::log_info("Output difference: {} bits (out of 64)", bits_changed);
-        std::log_info("Avalanche effect: {:.4}%", (bits_changed * 100.0) / 64.0);
+        std::cout << "\nxxHash3-64 avalanche test:" << std::endl;
+        std::cout << "Input difference: 1 bit" << std::endl;
+        std::cout << std::format(" Output difference: {} bits (out of 64)", bits_changed) << std::endl;
+        std::cout << std::format(" Avalanche effect: {:.4}%", (bits_changed * 100.0) / 64.0) << std::endl;
     }
     
     // xxHash3-128 avalanche
     {
-        auto hash1 = psyfer::hash::xxhash3_128::hash(data1);
-        auto hash2 = psyfer::hash::xxhash3_128::hash(data2);
+        auto hash1 = psyfer::xxhash3_128::hash(data1);
+        auto hash2 = psyfer::xxhash3_128::hash(data2);
         
         uint64_t diff_low = hash1.low ^ hash2.low;
         uint64_t diff_high = hash1.high ^ hash2.high;
         int bits_changed = std::popcount(diff_low) + std::popcount(diff_high);
         
-        std::log_info("\nxxHash3-128 avalanche test:");
-        std::log_info("Input difference: 1 bit");
-        std::log_info("Output difference: {} bits (out of 128)", bits_changed);
-        std::log_info("Avalanche effect: {:.4}%", (bits_changed * 100.0) / 128.0);
+        std::cout << "\nxxHash3-128 avalanche test:" << std::endl;
+        std::cout << "Input difference: 1 bit" << std::endl;
+        std::cout << std::format(" Output difference: {} bits (out of 128)", bits_changed) << std::endl;
+        std::cout << std::format(" Avalanche effect: {:.4}%", (bits_changed * 100.0) / 128.0) << std::endl;
     }
     
     return true;
@@ -385,8 +385,8 @@ bool test_xxhash3_avalanche() {
 
 // Test xxHash3 collision resistance
 bool test_xxhash3_collisions() {
-    std::log_info("\n=== xxHash3 Collision Resistance ===");
-    std::log_info("Testing for collisions in small input space...");
+    std::cout << "\n=== xxHash3 Collision Resistance ===" << std::endl;
+    std::cout << "Testing for collisions in small input space..." << std::endl;
     
     const int num_tests = 10000;
     
@@ -398,12 +398,12 @@ bool test_xxhash3_collisions() {
         for (int i = 0; i < num_tests; ++i) {
             std::string input = "test" + std::to_string(i);
             auto data = to_bytes(input);
-            uint32_t hash = psyfer::hash::xxhash3_24::hash(data);
+            uint32_t hash = psyfer::xxhash3_24::hash(data);
             
             if (hash24_map.find(hash) != hash24_map.end()) {
                 if (collisions_24 < 5) {  // Only print first few collisions
-                    std::log_info("Collision in xxHash3-24: \"{}\" and \"{}\" both hash to 0x{:06x}",
-                                  hash24_map[hash], input, hash);
+                    std::cout << std::format(" Collision in xxHash3-24: '{}' and '{}' both hash to 0x{:06x}",
+                                  hash24_map[hash], input, hash) << std::endl;
                 }
                 collisions_24++;
             } else {
@@ -411,9 +411,9 @@ bool test_xxhash3_collisions() {
             }
         }
         
-        std::log_info("\nxxHash3-24 collisions in {} inputs: {}", num_tests, collisions_24);
+        std::cout << std::format("\nxxHash3-24 collisions in {} inputs: {}", num_tests, collisions_24) << std::endl;
         double expected_24 = (static_cast<double>(num_tests) * num_tests) / (2.0 * (1 << 24));
-        std::log_info("Expected for 24-bit hash: ~{:.5}", expected_24);
+        std::cout << std::format(" Expected for 24-bit hash: ~{:.5}", expected_24) << std::endl;
     }
     
     // Test xxHash3-64 collisions
@@ -424,19 +424,19 @@ bool test_xxhash3_collisions() {
         for (int i = 0; i < num_tests; ++i) {
             std::string input = "test" + std::to_string(i);
             auto data = to_bytes(input);
-            uint64_t hash = psyfer::hash::xxhash3_64::hash(data);
+            uint64_t hash = psyfer::xxhash3_64::hash(data);
             
             if (hash64_map.find(hash) != hash64_map.end()) {
-                std::log_info("Unexpected collision in xxHash3-64!");
+                std::cout << "Unexpected collision in xxHash3-64!" << std::endl;
                 collisions_64++;
             } else {
                 hash64_map[hash] = input;
             }
         }
         
-        std::log_info("\nxxHash3-64 collisions in {} inputs: {}", num_tests, collisions_64);
-        std::log_info("Expected for 64-bit hash: ~{:.2e} (essentially 0)", 
-                      (static_cast<double>(num_tests) * num_tests) / (2.0 * static_cast<double>(1ULL << 63)));
+        std::cout << std::format("\nxxHash3-64 collisions in {} inputs: {}", num_tests, collisions_64) << std::endl;
+        std::cout << std::format(" Expected for 64-bit hash: ~{:.2e} (essentially 0)", 
+                      (static_cast<double>(num_tests) * num_tests) / (2.0 * static_cast<double>(1ULL << 63))) << std::endl;
     }
     
     return true;
@@ -444,68 +444,68 @@ bool test_xxhash3_collisions() {
 
 // Test xxHash3 variant comparison
 bool test_xxhash3_variants() {
-    std::log_info("\n=== xxHash3 Variant Comparison ===");
-    std::log_info("Comparing performance of different xxHash3 variants:");
+    std::cout << "\n=== xxHash3 Variant Comparison ===" << std::endl;
+    std::cout << "Comparing performance of different xxHash3 variants:" << std::endl;
     
     std::vector<std::byte> data(1024);
-    psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
     
     const int iterations = 1000000;
-    std::log_info("Data size: {} bytes, Iterations: {}\n", data.size(), iterations);
+    std::cout << std::format("Data size: {} bytes, Iterations: {}\n", data.size(), iterations);
     
     // xxHash3-24
     {
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            [[maybe_unused]] volatile uint32_t h = psyfer::hash::xxhash3_24::hash(data);
+            [[maybe_unused]] volatile uint32_t h = psyfer::xxhash3_24::hash(data);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        std::log_info("xxHash3-24: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration);
+        std::cout << std::format(" xxHash3-24: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration) << std::endl;
     }
     
     // xxHash3-32
     {
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            [[maybe_unused]] volatile uint32_t h = psyfer::hash::xxhash3_32::hash(data);
+            [[maybe_unused]] volatile uint32_t h = psyfer::xxhash3_32::hash(data);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        std::log_info("xxHash3-32: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration);
+        std::cout << std::format(" xxHash3-32: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration) << std::endl;
     }
     
     // xxHash3-64
     {
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            [[maybe_unused]] volatile uint64_t h = psyfer::hash::xxhash3_64::hash(data);
+            [[maybe_unused]] volatile uint64_t h = psyfer::xxhash3_64::hash(data);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        std::log_info("xxHash3-64: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration);
+        std::cout << std::format(" xxHash3-64: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration) << std::endl;
     }
     
     // xxHash3-128
     {
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            [[maybe_unused]] volatile auto h = psyfer::hash::xxhash3_128::hash(data);
+            [[maybe_unused]] volatile auto h = psyfer::xxhash3_128::hash(data);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        std::log_info("xxHash3-128: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration);
+        std::cout << std::format(" xxHash3-128: {} µs ({:.5} ops/sec)", duration, (iterations * 1e6) / duration) << std::endl;
     }
     
-    std::log_info("\nNote: All variants should have similar performance since they use the same core algorithm");
+    std::cout << "\nNote: All variants should have similar performance since they use the same core algorithm" << std::endl;
     
     return true;
 }
 
 
 int main() {
-    std::log_info("=== xxHash3 Comprehensive Test Suite ===");
-    std::log_info("Testing xxHash3 non-cryptographic hash functions (24, 32, 64, 128-bit variants)");
+    std::cout << "=== xxHash3 Comprehensive Test Suite ===" << std::endl;
+    std::cout << "Testing xxHash3 non-cryptographic hash functions (24, 32, 64, 128-bit variants)" << std::endl;
     
     bool all_passed = true;
     
@@ -518,8 +518,8 @@ int main() {
     all_passed &= test_xxhash3_collisions();
     all_passed &= test_xxhash3_variants();
     
-    std::log_info("\n\n=== Test Summary ===");
-    std::log_info("Overall result: {}", all_passed ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
+    std::cout << "\n\n=== Test Summary ===" << std::endl;
+    std::cout << std::format("Overall result: {}", all_passed ? "ALL TESTS PASSED" : "SOME TESTS FAILED") << std::endl;
     
     return all_passed ? 0 : 1;
 }

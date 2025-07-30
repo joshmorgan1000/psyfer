@@ -39,7 +39,7 @@ void example_basic_signing() {
     std::cout << "\n=== Example 1: Basic Ed25519 Signatures ===\n";
     
     // Generate a key pair
-    auto keypair_result = crypto::ed25519::generate_key_pair();
+    auto keypair_result = psyfer::ed25519::generate_key_pair();
     if (!keypair_result) {
         std::cerr << "Failed to generate key pair\n";
         return;
@@ -57,7 +57,7 @@ void example_basic_signing() {
     );
     
     std::array<std::byte, 64> signature;
-    auto err = crypto::ed25519::sign(msg_bytes, keypair.private_key, signature);
+    auto err = psyfer::ed25519::sign(msg_bytes, keypair.private_key, signature);
     if (err) {
         std::cerr << "Signing failed: " << err.message() << "\n";
         return;
@@ -67,7 +67,7 @@ void example_basic_signing() {
     print_hex("Signature", signature, 32);
     
     // Verify the signature
-    bool valid = crypto::ed25519::verify(msg_bytes, signature, keypair.public_key);
+    bool valid = psyfer::ed25519::verify(msg_bytes, signature, keypair.public_key);
     std::cout << "\nSignature verification: " << (valid ? "✅ VALID" : "❌ INVALID") << "\n";
     
     // Try to verify with wrong message
@@ -77,13 +77,13 @@ void example_basic_signing() {
         reinterpret_cast<const std::byte*>(wrong_message.data() + wrong_message.size())
     );
     
-    bool wrong_valid = crypto::ed25519::verify(wrong_bytes, signature, keypair.public_key);
+    bool wrong_valid = psyfer::ed25519::verify(wrong_bytes, signature, keypair.public_key);
     std::cout << "Wrong message verification: " << (wrong_valid ? "❌ VALID" : "✅ INVALID") << "\n";
     
     // Try to verify with wrong public key
-    auto other_keypair = crypto::ed25519::generate_key_pair();
+    auto other_keypair = psyfer::ed25519::generate_key_pair();
     if (other_keypair) {
-        bool wrong_key_valid = crypto::ed25519::verify(msg_bytes, signature, other_keypair->public_key);
+        bool wrong_key_valid = psyfer::ed25519::verify(msg_bytes, signature, other_keypair->public_key);
         std::cout << "Wrong key verification: " << (wrong_key_valid ? "❌ VALID" : "✅ INVALID") << "\n";
     }
 }
@@ -95,7 +95,7 @@ void example_document_signing() {
     std::cout << "\n=== Example 2: Document Signing Workflow ===\n";
     
     // Generate signer's key pair
-    auto signer_kp = crypto::ed25519::generate_key_pair();
+    auto signer_kp = psyfer::ed25519::generate_key_pair();
     if (!signer_kp) return;
     
     // Simulate a document with metadata
@@ -128,20 +128,20 @@ void example_document_signing() {
     auto doc_bytes = doc.serialize();
     std::array<std::byte, 64> doc_signature;
     
-    crypto::ed25519::sign(doc_bytes, signer_kp->private_key, doc_signature);
+    psyfer::ed25519::sign(doc_bytes, signer_kp->private_key, doc_signature);
     
     print_hex("\nDocument signature", doc_signature, 32);
     print_hex("Signer's public key", signer_kp->public_key);
     
     // Verification (by another party)
     std::cout << "\nVerification process:\n";
-    bool verified = crypto::ed25519::verify(doc_bytes, doc_signature, signer_kp->public_key);
+    bool verified = psyfer::ed25519::verify(doc_bytes, doc_signature, signer_kp->public_key);
     std::cout << "  Document integrity: " << (verified ? "✅ VERIFIED" : "❌ FAILED") << "\n";
     
     // Simulate tampering
     doc.content += " (modified)";
     auto tampered_bytes = doc.serialize();
-    bool tampered_check = crypto::ed25519::verify(tampered_bytes, doc_signature, signer_kp->public_key);
+    bool tampered_check = psyfer::ed25519::verify(tampered_bytes, doc_signature, signer_kp->public_key);
     std::cout << "  Tampered document: " << (tampered_check ? "❌ VERIFIED" : "✅ REJECTED") << "\n";
 }
 
@@ -154,7 +154,7 @@ void example_multi_signature() {
     // Create multiple signers
     struct Signer {
         std::string name;
-        crypto::ed25519::key_pair keypair;
+        psyfer::ed25519::key_pair keypair;
         std::array<std::byte, 64> signature;
     };
     
@@ -163,7 +163,7 @@ void example_multi_signature() {
     
     // Generate key pairs for all signers
     for (const auto& name : names) {
-        auto kp = crypto::ed25519::generate_key_pair();
+        auto kp = psyfer::ed25519::generate_key_pair();
         if (!kp) continue;
         signers.push_back({name, std::move(*kp), {}});
     }
@@ -180,7 +180,7 @@ void example_multi_signature() {
     
     // Each party signs
     for (auto& signer : signers) {
-        crypto::ed25519::sign(doc_bytes, signer.keypair.private_key, signer.signature);
+        psyfer::ed25519::sign(doc_bytes, signer.keypair.private_key, signer.signature);
         std::cout << "  " << signer.name << ":\n";
         print_hex("    Public key", signer.keypair.public_key);
         print_hex("    Signature", signer.signature, 16);
@@ -191,7 +191,7 @@ void example_multi_signature() {
     int valid_count = 0;
     
     for (const auto& signer : signers) {
-        bool valid = crypto::ed25519::verify(doc_bytes, signer.signature, signer.keypair.public_key);
+        bool valid = psyfer::ed25519::verify(doc_bytes, signer.signature, signer.keypair.public_key);
         std::cout << "  " << signer.name << ": " << (valid ? "✅" : "❌") << "\n";
         if (valid) valid_count++;
     }
@@ -210,7 +210,7 @@ void example_performance() {
     const int iterations = 100;
     
     // Generate test keypair
-    auto keypair = crypto::ed25519::generate_key_pair();
+    auto keypair = psyfer::ed25519::generate_key_pair();
     if (!keypair) return;
     
     // Test data
@@ -225,7 +225,7 @@ void example_performance() {
     auto start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < iterations; ++i) {
-        auto kp = crypto::ed25519::generate_key_pair();
+        auto kp = psyfer::ed25519::generate_key_pair();
         if (!kp) break;
     }
     
@@ -235,18 +235,18 @@ void example_performance() {
     start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < iterations; ++i) {
-        crypto::ed25519::sign(msg_bytes, keypair->private_key, signature);
+        psyfer::ed25519::sign(msg_bytes, keypair->private_key, signature);
     }
     
     auto sign_time = std::chrono::high_resolution_clock::now() - start;
     
     // Benchmark verification
-    crypto::ed25519::sign(msg_bytes, keypair->private_key, signature);
+    psyfer::ed25519::sign(msg_bytes, keypair->private_key, signature);
     
     start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < iterations; ++i) {
-        crypto::ed25519::verify(msg_bytes, signature, keypair->public_key);
+        psyfer::ed25519::verify(msg_bytes, signature, keypair->public_key);
     }
     
     auto verify_time = std::chrono::high_resolution_clock::now() - start;
@@ -270,7 +270,7 @@ void example_performance() {
     
     // Check if hardware acceleration is available
     std::cout << "\nHardware acceleration: " 
-              << (crypto::ed25519::hardware_accelerated() ? "✅ AVAILABLE" : "❌ NOT AVAILABLE") << "\n";
+              << (psyfer::ed25519::hardware_accelerated() ? "✅ AVAILABLE" : "❌ NOT AVAILABLE") << "\n";
 }
 
 /**
@@ -280,7 +280,7 @@ void example_deterministic_signatures() {
     std::cout << "\n=== Example 5: Deterministic Signatures ===\n";
     
     // Generate key pair
-    auto keypair = crypto::ed25519::generate_key_pair();
+    auto keypair = psyfer::ed25519::generate_key_pair();
     if (!keypair) return;
     
     std::string message = "Test message for deterministic signatures";
@@ -295,7 +295,7 @@ void example_deterministic_signatures() {
     
     for (int i = 0; i < 3; ++i) {
         std::array<std::byte, 64> sig;
-        crypto::ed25519::sign(msg_bytes, keypair->private_key, sig);
+        psyfer::ed25519::sign(msg_bytes, keypair->private_key, sig);
         signatures.push_back(sig);
         
         std::cout << "  Signature " << (i + 1) << ": ";
@@ -330,7 +330,7 @@ void example_batch_verification() {
     
     struct SignedMessage {
         std::string content;
-        crypto::ed25519::key_pair signer;
+        psyfer::ed25519::key_pair signer;
         std::array<std::byte, 64> signature;
     };
     
@@ -340,7 +340,7 @@ void example_batch_verification() {
     std::cout << "Creating " << num_messages << " signed messages...\n";
     
     for (size_t i = 0; i < num_messages; ++i) {
-        auto kp = crypto::ed25519::generate_key_pair();
+        auto kp = psyfer::ed25519::generate_key_pair();
         if (!kp) continue;
         
         SignedMessage msg;
@@ -351,7 +351,7 @@ void example_batch_verification() {
         reinterpret_cast<const std::byte*>(msg.content.data()),
         reinterpret_cast<const std::byte*>(msg.content.data() + msg.content.size())
     );
-        crypto::ed25519::sign(msg_bytes, msg.signer.private_key, msg.signature);
+        psyfer::ed25519::sign(msg_bytes, msg.signer.private_key, msg.signature);
         
         messages.push_back(std::move(msg));
     }
@@ -365,7 +365,7 @@ void example_batch_verification() {
         reinterpret_cast<const std::byte*>(msg.content.data()),
         reinterpret_cast<const std::byte*>(msg.content.data() + msg.content.size())
     );
-        if (crypto::ed25519::verify(msg_bytes, msg.signature, msg.signer.public_key)) {
+        if (psyfer::ed25519::verify(msg_bytes, msg.signature, msg.signer.public_key)) {
             valid_count++;
         }
     }

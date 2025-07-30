@@ -42,7 +42,6 @@ template<typename T>
 concept HasDecrypt = requires(std::span<const std::byte> src, T* target, std::span<const std::byte> key) {
     { T::decrypt(src, target, key) } -> std::convertible_to<size_t>;
 };
-namespace std {
 template<typename T>
 concept Streamable=requires(std::ostream &os,T const &t){{os<<t}->std::convertible_to<std::ostream &>;};
 template<typename T> concept HasToJson=requires(T t){{t.toJson()}->std::convertible_to<std::string>;};
@@ -198,19 +197,18 @@ uint64_t current = getGlobalContext().currently_serving.load();
 while (current != ticket) { getGlobalContext().currently_serving.wait(current);
 current = getGlobalContext().currently_serving.load(); } }
 inline void stdout_unlock() { getGlobalContext().currently_serving.fetch_add(1);
-getGlobalContext().currently_serving.notify_all(); } }
+getGlobalContext().currently_serving.notify_all(); }
 namespace psyfer {
-namespace config {
-    inline std::atomic<bool> use_software_only_for_encryption{false};
-    inline void enable_software_only() noexcept {
-        use_software_only_for_encryption.store(true);
-    }
-    inline void disable_software_only() noexcept {
-        use_software_only_for_encryption.store(false);
-    }
-    [[nodiscard]] inline bool is_software_only() noexcept {
-        return use_software_only_for_encryption.load();
-    }
+// Configuration functions
+inline std::atomic<bool> use_software_only_for_encryption{false};
+inline void enable_software_only() noexcept {
+    use_software_only_for_encryption.store(true);
+}
+inline void disable_software_only() noexcept {
+    use_software_only_for_encryption.store(false);
+}
+[[nodiscard]] inline bool is_software_only() noexcept {
+    return use_software_only_for_encryption.load();
 }
 enum class error_code : int32_t {
     success = 0,
@@ -242,21 +240,18 @@ public:
 }
 template<typename T>
 using result = std::expected<T, std::error_code>;
-namespace key_sizes {
-    constexpr size_t AES256 = 32;
-    constexpr size_t CHACHA20 = 32;
-    constexpr size_t X25519_PRIVATE = 32;
-    constexpr size_t X25519_PUBLIC = 32;
-    constexpr size_t BLAKE3 = 32;
-}
-namespace nonce_sizes {
-    constexpr size_t AES256_GCM = 12;
-    constexpr size_t CHACHA20_POLY1305 = 12;
-}
-namespace tag_sizes {
-    constexpr size_t AES256_GCM = 16;
-    constexpr size_t CHACHA20_POLY1305 = 16;
-}
+// Key size constants
+constexpr size_t AES256_KEY_SIZE = 32;
+constexpr size_t CHACHA20_KEY_SIZE = 32;
+constexpr size_t X25519_PRIVATE_KEY_SIZE = 32;
+constexpr size_t X25519_PUBLIC_KEY_SIZE = 32;
+constexpr size_t BLAKE3_KEY_SIZE = 32;
+// Nonce size constants
+constexpr size_t AES256_GCM_NONCE_SIZE = 12;
+constexpr size_t CHACHA20_POLY1305_NONCE_SIZE = 12;
+// Tag size constants  
+constexpr size_t AES256_GCM_TAG_SIZE = 16;
+constexpr size_t CHACHA20_POLY1305_TAG_SIZE = 16;
 template<typename T>
 concept byte_container = requires(T t) {
     { t.data() } -> std::convertible_to<const std::byte*>;
@@ -311,11 +306,11 @@ public:
 }
 template<>
 struct std::is_error_code_enum<psyfer::error_code> : std::true_type {};
-namespace psyfer::hash {
-class sha256 final : public hash_algorithm {
+namespace psyfer {
+class sha256_hasher final : public hash_algorithm {
 public:
-    sha256() noexcept;
-    ~sha256() override;
+    sha256_hasher() noexcept;
+    ~sha256_hasher() override;
     [[nodiscard]] size_t output_size() const noexcept override { return 32; }
     void update(std::span<const std::byte> data) noexcept override;
     void finalize(std::span<std::byte> output) noexcept override;
@@ -325,10 +320,10 @@ private:
     class impl;
     std::unique_ptr<impl> pimpl;
 };
-class sha512 final : public hash_algorithm {
+class sha512_hasher final : public hash_algorithm {
 public:
-    sha512() noexcept;
-    ~sha512() override;
+    sha512_hasher() noexcept;
+    ~sha512_hasher() override;
     [[nodiscard]] size_t output_size() const noexcept override { return 64; }
     void update(std::span<const std::byte> data) noexcept override;
     void finalize(std::span<std::byte> output) noexcept override;
@@ -338,10 +333,10 @@ private:
     class impl;
     std::unique_ptr<impl> pimpl;
 };
-class hmac_sha256 final : public hash_algorithm {
+class hmac_sha256_algorithm final : public hash_algorithm {
 public:
-    explicit hmac_sha256(std::span<const std::byte> key) noexcept;
-    ~hmac_sha256() override;
+    explicit hmac_sha256_algorithm(std::span<const std::byte> key) noexcept;
+    ~hmac_sha256_algorithm() override;
     [[nodiscard]] size_t output_size() const noexcept override { return 32; }
     void update(std::span<const std::byte> data) noexcept override;
     void finalize(std::span<std::byte> output) noexcept override;
@@ -355,10 +350,10 @@ private:
     class impl;
     std::unique_ptr<impl> pimpl;
 };
-class hmac_sha512 final : public hash_algorithm {
+class hmac_sha512_algorithm final : public hash_algorithm {
 public:
-    explicit hmac_sha512(std::span<const std::byte> key) noexcept;
-    ~hmac_sha512() override;
+    explicit hmac_sha512_algorithm(std::span<const std::byte> key) noexcept;
+    ~hmac_sha512_algorithm() override;
     [[nodiscard]] size_t output_size() const noexcept override { return 64; }
     void update(std::span<const std::byte> data) noexcept override;
     void finalize(std::span<std::byte> output) noexcept override;
@@ -511,7 +506,7 @@ using xxh3_32 = xxhash3_32;
 using xxh3_64 = xxhash3_64;
 using xxh3_128 = xxhash3_128;
 }
-namespace psyfer::crypto {
+namespace psyfer {
 [[nodiscard]] bool aes_ni_available() noexcept;
 class aes256 {
 public:
@@ -579,8 +574,7 @@ private:
         std::span<const std::byte> data
     ) noexcept;
     static void increment_counter(std::span<std::byte, 16> counter) noexcept;
-}; }
-namespace psyfer::mac {
+};
 template<size_t KeySize>
 class aes_cmac {
 public:
@@ -618,8 +612,6 @@ using aes_cmac_128 = aes_cmac<16>;
 using aes_cmac_256 = aes_cmac<32>;
 using cmac128 = aes_cmac_128;
 using cmac256 = aes_cmac_256;
-}
-namespace psyfer::utils {
 class secure_random {
 public:
     [[nodiscard]] static std::error_code generate(std::span<std::byte> buffer) noexcept;
@@ -703,6 +695,14 @@ private:
 };
 using secure_string = std::basic_string<char, std::char_traits<char>, 
                                         secure_allocator<char>>;
+// Forward declarations
+void secure_clear(void* ptr, size_t size) noexcept;
+void ghash_portable(
+    std::array<std::byte, 16>& accumulator,
+    const std::array<std::byte, 16>& h,
+    std::span<const std::byte> data
+) noexcept;
+
 template<typename T>
 using secure_vector = std::vector<T, secure_allocator<T>>;
 template<typename T, size_t N>
@@ -711,7 +711,6 @@ public:
     ~secure_array() { secure_clear(this->data(), N * sizeof(T)); }
     using std::array<T, N>::array;
 };
-void secure_clear(void* ptr, size_t size) noexcept;
 [[nodiscard]] bool secure_compare(
     const void* a, 
     const void* b, 
@@ -786,8 +785,6 @@ using chacha20_key = secure_key<32>;
 using x25519_private_key = secure_key<32>;
 using x25519_key = x25519_private_key;  // Alias for convenience
 using blake3_key = secure_key<32>;
-} // namespace psyfer::utils
-namespace psyfer::kdf {
 class hkdf {
 public:
     [[nodiscard]] static std::error_code derive_sha256(
@@ -826,8 +823,6 @@ private:
     static constexpr size_t MAX_OUTPUT_SHA256 = 255 * 32;
     static constexpr size_t MAX_OUTPUT_SHA512 = 255 * 64;
 };
-} // namespace psyfer::kdf
-namespace psyfer::crypto {
 class aes128 {
 public:
     static constexpr size_t BLOCK_SIZE = 16;  // 128 bits
@@ -1467,8 +1462,6 @@ public:
         std::span<const std::byte> input
     ) noexcept;
 };
-}
-namespace psyfer::serialization {
 template<typename T>
 concept HasEncryptedSize = requires(const T& t) {
     { t.encrypted_size() } -> std::convertible_to<size_t>;
@@ -1592,8 +1585,6 @@ public:
 private:
     std::vector<std::byte>& buffer_;
 };
-}
-namespace psyfer {
 class PsyferContext {
 public:
     struct Config {
@@ -1679,12 +1670,12 @@ public:
         std::span<const std::byte> message,
         std::span<const std::byte, 32> mac
     ) noexcept;
-    [[nodiscard]] result<utils::secure_key_256> derive_key(
+    [[nodiscard]] result<secure_key_256> derive_key(
         std::string_view purpose,
         std::span<const std::byte> salt = {}
     ) noexcept;
     template<size_t KeySize>
-    [[nodiscard]] result<utils::secure_key<KeySize>> derive_key_sized(
+    [[nodiscard]] result<secure_key<KeySize>> derive_key_sized(
         std::string_view purpose,
         std::span<const std::byte> salt = {}
     ) noexcept;
@@ -1700,7 +1691,7 @@ public:
         return psy_key_.span();
     }
     template<typename T>
-    requires serialization::HasEncryptedSize<T>
+    requires HasEncryptedSize<T>
     [[nodiscard]] result<std::vector<std::byte>> encrypt_object(const T& obj) noexcept {
         size_t size = obj.encrypted_size();
         std::vector<std::byte> buffer(size);
@@ -1714,7 +1705,7 @@ public:
         return buffer;
     }
     template<typename T>
-    requires serialization::HasDecrypt<T>
+    requires HasDecrypt<T>
     [[nodiscard]] result<T> decrypt_object(std::span<const std::byte> data) noexcept {
         T obj;
         size_t consumed = obj.decrypt(data, get_psy_key());
@@ -1730,11 +1721,11 @@ public:
     PsyferContext& operator=(PsyferContext&&) noexcept = default;
 private:
     PsyferContext() noexcept = default;
-    utils::secure_key_256 master_key_;        // Master encryption key
-    utils::secure_key_256 hmac_key_;          // HMAC key
-    utils::secure_key_256 psy_key_;           // Key for psy-c objects
-    crypto::x25519::key_pair x25519_keypair_;
-    crypto::ed25519::key_pair ed25519_keypair_;
+    secure_key_256 master_key_;        // Master encryption key
+    secure_key_256 hmac_key_;          // HMAC key
+    secure_key_256 psy_key_;           // Key for psy-c objects
+    x25519::key_pair x25519_keypair_;
+    ed25519::key_pair ed25519_keypair_;
     std::string identity_name_;
     std::chrono::system_clock::time_point created_at_;
     std::chrono::hours rotation_period_;
@@ -1745,11 +1736,11 @@ private:
     std::span<const std::byte> plaintext,
     std::span<const std::byte, 32> key
 ) noexcept {
-    crypto::aes256_gcm cipher;
+    aes256_gcm cipher;
     std::vector<std::byte> ciphertext(plaintext.size() + 12 + 16);
     std::memcpy(ciphertext.data() + 28, plaintext.data(), plaintext.size());
     std::span<std::byte, 12> nonce(ciphertext.data(), 12);
-    auto err = utils::secure_random::generate(nonce);
+    auto err = secure_random::generate(nonce);
     if (err) return std::unexpected(err);
     std::span<std::byte> data(ciphertext.data() + 28, plaintext.size());
     std::span<std::byte, 16> tag(ciphertext.data() + 12, 16);
@@ -1765,7 +1756,7 @@ private:
     if (ciphertext.size() < 28) {
         return std::unexpected(make_error_code(error_code::invalid_buffer_size));
     }
-    crypto::aes256_gcm cipher;
+    aes256_gcm cipher;
     std::array<std::byte, 12> nonce;
     std::array<std::byte, 16> tag;
     std::memcpy(nonce.data(), ciphertext.data(), 12);
@@ -1783,626 +1774,4 @@ template<typename T>
 ) noexcept requires HasDecrypt<T> {
     return T::decrypt(source_buffer, target, key);
 }
-template<typename T>
-concept HasEncryptedSize = requires(const T& t) {
-    { t.encrypted_size() } -> std::convertible_to<size_t>;
-};
-namespace psyfer::serialization {
-enum class WireType : uint8_t {
-    VARINT = 0,      // Variable-length integer
-    FIXED64 = 1,     // 64-bit fixed
-    BYTES = 2,       // Length-delimited
-    FIXED32 = 5,     // 32-bit fixed
-};
-struct FieldHeader {
-    uint32_t field_number;
-    WireType wire_type;
-    [[nodiscard]] constexpr uint32_t encode() const noexcept {
-        return (field_number << 3) | static_cast<uint8_t>(wire_type);
-    }
-    [[nodiscard]] static constexpr FieldHeader decode(uint32_t value) noexcept {
-        return {
-            .field_number = value >> 3,
-            .wire_type = static_cast<WireType>(value & 0x07)
-        };
-    }
-};
-class BufferWriter {
-public:
-    explicit BufferWriter(std::span<std::byte> buffer) noexcept
-        : buffer_(buffer), position_(0) {}
-    [[nodiscard]] size_t position() const noexcept { return position_; }
-    [[nodiscard]] size_t remaining() const noexcept { 
-        return position_ < buffer_.size() ? buffer_.size() - position_ : 0;
-    }
-    [[nodiscard]] bool has_space(size_t bytes) const noexcept {
-        return position_ + bytes <= buffer_.size();
-    }
-    bool write_bytes(std::span<const std::byte> data) noexcept {
-        if (!has_space(data.size())) return false;
-        std::memcpy(buffer_.data() + position_, data.data(), data.size());
-        position_ += data.size();
-        return true;
-    }
-    bool write_varint(uint64_t value) noexcept {
-        while (value >= 0x80) {
-            if (!write_u8(static_cast<uint8_t>(value | 0x80))) return false;
-            value >>= 7;
-        }
-        return write_u8(static_cast<uint8_t>(value));
-    }
-    bool write_signed_varint(int64_t value) noexcept {
-        // Zigzag encoding: (n << 1) ^ (n >> 63)
-        uint64_t encoded = static_cast<uint64_t>((value << 1) ^ (value >> 63));
-        return write_varint(encoded);
-    }
-    bool write_field_header(uint32_t field_number, WireType wire_type) noexcept {
-        FieldHeader header{field_number, wire_type};
-        return write_varint(header.encode());
-    }
-    bool write_u8(uint8_t value) noexcept {
-        if (!has_space(1)) return false;
-        buffer_[position_++] = static_cast<std::byte>(value);
-        return true;
-    }
-    bool write_u32(uint32_t value) noexcept {
-        if (!has_space(4)) return false;
-        std::memcpy(buffer_.data() + position_, &value, 4);
-        position_ += 4;
-        return true;
-    }
-    bool write_u64(uint64_t value) noexcept {
-        if (!has_space(8)) return false;
-        std::memcpy(buffer_.data() + position_, &value, 8);
-        position_ += 8;
-        return true;
-    }
-    bool write_f32(float value) noexcept {
-        return write_u32(std::bit_cast<uint32_t>(value));
-    }
-    bool write_f64(double value) noexcept {
-        return write_u64(std::bit_cast<uint64_t>(value));
-    }
-    bool write_bytes_field(std::span<const std::byte> data) noexcept {
-        if (!write_varint(data.size())) return false;
-        return write_bytes(data);
-    }
-    bool write_string_field(std::string_view str) noexcept {
-        auto bytes = std::as_bytes(std::span(str));
-        return write_bytes_field(bytes);
-    }
-private:
-    std::span<std::byte> buffer_;
-    size_t position_;
-};
-class BufferReader {
-public:
-    explicit BufferReader(std::span<const std::byte> buffer) noexcept
-        : buffer_(buffer), position_(0) {}
-    [[nodiscard]] size_t position() const noexcept { return position_; }
-    [[nodiscard]] size_t remaining() const noexcept { 
-        return position_ < buffer_.size() ? buffer_.size() - position_ : 0;
-    }
-    [[nodiscard]] bool has_bytes(size_t bytes) const noexcept {
-        return position_ + bytes <= buffer_.size();
-    }
-    bool read_bytes(std::span<std::byte> out) noexcept {
-        if (!has_bytes(out.size())) return false;
-        std::memcpy(out.data(), buffer_.data() + position_, out.size());
-        position_ += out.size();
-        return true;
-    }
-    [[nodiscard]] std::span<const std::byte> peek_bytes(size_t count) const noexcept {
-        if (!has_bytes(count)) return {};
-        return buffer_.subspan(position_, count);
-    }
-    bool skip(size_t bytes) noexcept {
-        if (!has_bytes(bytes)) return false;
-        position_ += bytes;
-        return true;
-    }
-    std::optional<uint64_t> read_varint() noexcept {
-        uint64_t result = 0;
-        int shift = 0;
-        while (true) {
-            if (!has_bytes(1)) return std::nullopt;
-            uint8_t byte = static_cast<uint8_t>(buffer_[position_++]);
-            if (shift >= 64) return std::nullopt; // Overflow
-            result |= static_cast<uint64_t>(byte & 0x7F) << shift;
-            if ((byte & 0x80) == 0) break;
-            shift += 7;
-        }
-        return result;
-    }
-    std::optional<int64_t> read_signed_varint() noexcept {
-        auto encoded = read_varint();
-        if (!encoded) return std::nullopt;
-        uint64_t n = *encoded;
-        return static_cast<int64_t>((n >> 1) ^ -static_cast<int64_t>(n & 1));
-    }
-    std::optional<FieldHeader> read_field_header() noexcept {
-        auto encoded = read_varint();
-        if (!encoded) return std::nullopt;
-        return FieldHeader::decode(static_cast<uint32_t>(*encoded));
-    }
-    std::optional<uint8_t> read_u8() noexcept {
-        if (!has_bytes(1)) return std::nullopt;
-        return static_cast<uint8_t>(buffer_[position_++]);
-    }
-    std::optional<uint32_t> read_u32() noexcept {
-        if (!has_bytes(4)) return std::nullopt;
-        uint32_t value;
-        std::memcpy(&value, buffer_.data() + position_, 4);
-        position_ += 4;
-        return value;
-    }
-    std::optional<uint64_t> read_u64() noexcept {
-        if (!has_bytes(8)) return std::nullopt;
-        uint64_t value;
-        std::memcpy(&value, buffer_.data() + position_, 8);
-        position_ += 8;
-        return value;
-    }
-    std::optional<float> read_f32() noexcept {
-        auto bits = read_u32();
-        if (!bits) return std::nullopt;
-        return std::bit_cast<float>(*bits);
-    }
-    std::optional<double> read_f64() noexcept {
-        auto bits = read_u64();
-        if (!bits) return std::nullopt;
-        return std::bit_cast<double>(*bits);
-    }
-    std::optional<std::span<const std::byte>> read_bytes_field() noexcept {
-        auto length = read_varint();
-        if (!length || !has_bytes(*length)) return std::nullopt;
-        auto data = buffer_.subspan(position_, *length);
-        position_ += *length;
-        return data;
-    }
-    std::optional<std::string_view> read_string_field() noexcept {
-        auto bytes = read_bytes_field();
-        if (!bytes) return std::nullopt;
-        return std::string_view(
-            reinterpret_cast<const char*>(bytes->data()),
-            bytes->size()
-        );
-    }
-private:
-    std::span<const std::byte> buffer_;
-    size_t position_;
-};
-[[nodiscard]] inline size_t varint_size(uint64_t value) noexcept {
-    size_t size = 1;
-    while (value >= 0x80) {
-        value >>= 7;
-        ++size;
-    }
-    return size;
-}
-[[nodiscard]] inline size_t signed_varint_size(int64_t value) noexcept {
-    uint64_t encoded = static_cast<uint64_t>((value << 1) ^ (value >> 63));
-    return varint_size(encoded);
-}
-[[nodiscard]] inline size_t field_header_size(uint32_t field_number) noexcept {
-    return varint_size(field_number << 3);
-}
-[[nodiscard]] inline size_t bytes_field_size(size_t data_size) noexcept {
-    return varint_size(data_size) + data_size;
-}
-[[nodiscard]] inline size_t string_field_size(std::string_view str) noexcept {
-    return bytes_field_size(str.size());
-} }
-namespace psyfer::compression {
-enum class fpc_compression_level : uint8_t {
-    DEFAULT = 10,
-    MIN = 1,
-    MAX = 32
-};
-class predictor {
-public:
-    virtual ~predictor() = default;
-    [[nodiscard]] virtual uint64_t predict() const noexcept = 0;
-    virtual void update(uint64_t actual) noexcept = 0;
-};
-class fcm_predictor final : public predictor {
-public:
-    explicit fcm_predictor(size_t table_size) noexcept
-        : table_(table_size, 0)
-        , size_mask_(table_size - 1)
-        , last_hash_(0) {}
-    [[nodiscard]] uint64_t predict() const noexcept override {
-        return table_[last_hash_];
-    }
-    void update(uint64_t actual) noexcept override {
-        table_[last_hash_] = actual;
-        last_hash_ = hash(actual);
-    }
-private:
-    [[nodiscard]] uint64_t hash(uint64_t actual) const noexcept {
-        return ((last_hash_ << 6) ^ (actual >> 48)) & size_mask_;
-    }
-    std::vector<uint64_t> table_;
-    uint64_t size_mask_;
-    uint64_t last_hash_;
-};
-class dfcm_predictor final : public predictor {
-public:
-    explicit dfcm_predictor(size_t table_size) noexcept
-        : table_(table_size, 0)
-        , size_mask_(table_size - 1)
-        , last_hash_(0)
-        , last_value_(0) {}
-    [[nodiscard]] uint64_t predict() const noexcept override {
-        return table_[last_hash_] + last_value_;
-    }
-    void update(uint64_t actual) noexcept override {
-        table_[last_hash_] = actual - last_value_;
-        last_hash_ = hash(actual);
-        last_value_ = actual;
-    }
-private:
-    [[nodiscard]] uint64_t hash(uint64_t actual) const noexcept {
-        return ((last_hash_ << 2) ^ ((actual - last_value_) >> 40)) & size_mask_;
-    }
-    std::vector<uint64_t> table_;
-    uint64_t size_mask_;
-    uint64_t last_hash_;
-    uint64_t last_value_;
-};
-class fpc_writer {
-public:
-    static constexpr size_t MAX_RECORDS_PER_BLOCK = 32768;
-    static constexpr size_t BLOCK_HEADER_SIZE = 6;
-    explicit fpc_writer(std::vector<uint8_t>& output) noexcept
-        : fpc_writer(output, fpc_compression_level::DEFAULT) {}
-    fpc_writer(std::vector<uint8_t>& output, fpc_compression_level level) noexcept;
-    void write_float(double value) noexcept;
-    void write_floats(std::span<const double> values) noexcept;
-    void flush() noexcept;
-    [[nodiscard]] size_t bytes_written() const noexcept { return bytes_written_; }
-private:
-    void write_header() noexcept;
-    void encode_value(uint64_t value) noexcept;
-    void flush_block() noexcept;
-    [[nodiscard]] static uint8_t count_leading_zero_bytes(uint64_t value) noexcept;
-    std::vector<uint8_t>& output_;
-    uint8_t compression_level_;
-    bool header_written_ = false;
-    std::unique_ptr<fcm_predictor> fcm_;
-    std::unique_ptr<dfcm_predictor> dfcm_;
-    std::vector<uint8_t> headers_;
-    std::vector<uint8_t> values_;
-    uint64_t last_value_ = 0;
-    size_t record_count_ = 0;
-    size_t bytes_written_ = 0;
-};
-class fpc_reader {
-public:
-    static constexpr size_t BLOCK_HEADER_SIZE = 6;
-public:
-    explicit fpc_reader(std::span<const uint8_t> input) noexcept;
-    [[nodiscard]] std::optional<double> read_float() noexcept;
-    size_t read_floats(std::span<double> values) noexcept;
-    [[nodiscard]] bool has_data() const noexcept { 
-        return (block_pos_ < block_values_.size()) || (pos_ < input_.size()); 
-    }
-private:
-    bool read_header() noexcept;
-    bool read_block() noexcept;
-    [[nodiscard]] std::optional<uint64_t> decode_next_value() noexcept;
-    std::span<const uint8_t> input_;
-    size_t pos_ = 0;
-    uint8_t compression_level_ = 0;
-    std::unique_ptr<fcm_predictor> fcm_;
-    std::unique_ptr<dfcm_predictor> dfcm_;
-    std::vector<uint64_t> block_values_;
-    size_t block_pos_ = 0;
-};
-[[nodiscard]] std::vector<uint8_t> fpc_compress(
-    std::span<const double> input,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept;
-size_t fpc_decompress(
-    std::span<const uint8_t> input,
-    std::span<double> output
-) noexcept;
-[[nodiscard]] size_t fpc_max_decompressed_size(std::span<const uint8_t> input) noexcept;
-
-// Template overloads for multi-dimensional arrays
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress(
-    std::span<const T> input,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    // Convert to double if needed
-    if constexpr (std::is_same_v<T, double>) {
-        return fpc_compress(std::span<const double>(input.data(), input.size()), level);
-    } else {
-        std::vector<double> doubles;
-        doubles.reserve(input.size());
-        for (const auto& val : input) {
-            doubles.push_back(static_cast<double>(val));
-        }
-        return fpc_compress(std::span<const double>(doubles.data(), doubles.size()), level);
-    }
-}
-
-// Support for 2D arrays (matrices)
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress_2d(
-    std::span<const T> input,
-    [[maybe_unused]] size_t rows,
-    [[maybe_unused]] size_t cols,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    // Flatten and compress
-    return fpc_compress(input, level);
-}
-
-// Support for 3D arrays (tensors)
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress_3d(
-    std::span<const T> input,
-    [[maybe_unused]] size_t dim1,
-    [[maybe_unused]] size_t dim2,
-    [[maybe_unused]] size_t dim3,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    // Flatten and compress
-    return fpc_compress(input, level);
-}
-
-// Support for std::array
-template<typename T, size_t N>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress(
-    const std::array<T, N>& input,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    return fpc_compress(std::span<const T>(input.data(), N), level);
-}
-
-// Support for std::vector
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress(
-    const std::vector<T>& input,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    return fpc_compress(std::span<const T>(input.data(), input.size()), level);
-}
-
-// Support for nested vectors (2D)
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress(
-    const std::vector<std::vector<T>>& input,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    // Flatten the 2D vector
-    std::vector<T> flattened;
-    size_t total_size = 0;
-    for (const auto& row : input) {
-        total_size += row.size();
-    }
-    flattened.reserve(total_size);
-    
-    for (const auto& row : input) {
-        flattened.insert(flattened.end(), row.begin(), row.end());
-    }
-    
-    return fpc_compress(std::span<const T>(flattened.data(), flattened.size()), level);
-}
-
-// Decompression templates
-template<typename T>
-requires std::floating_point<T>
-size_t fpc_decompress(
-    std::span<const uint8_t> input,
-    std::span<T> output
-) noexcept {
-    if constexpr (std::is_same_v<T, double>) {
-        return fpc_decompress(input, std::span<double>(output.data(), output.size()));
-    } else {
-        // Decompress to temporary double buffer
-        std::vector<double> doubles(output.size());
-        size_t decompressed = fpc_decompress(input, std::span<double>(doubles.data(), doubles.size()));
-        
-        // Convert back to original type
-        for (size_t i = 0; i < decompressed; ++i) {
-            output[i] = static_cast<T>(doubles[i]);
-        }
-        return decompressed;
-    }
-}
-
-// Helper struct for tensor metadata
-struct fpc_tensor_header {
-    uint32_t rank;           // Number of dimensions
-    uint32_t total_elements; // Total number of elements
-    std::array<uint32_t, 8> dimensions; // Up to 8 dimensions
-};
-
-// Compress a tensor with metadata
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::vector<uint8_t> fpc_compress_tensor(
-    std::span<const T> data,
-    std::span<const size_t> dimensions,
-    fpc_compression_level level = fpc_compression_level::DEFAULT
-) noexcept {
-    std::vector<uint8_t> result;
-    
-    // Write header
-    fpc_tensor_header header{};
-    header.rank = static_cast<uint32_t>(dimensions.size());
-    header.total_elements = 1;
-    
-    for (size_t i = 0; i < dimensions.size() && i < 8; ++i) {
-        header.dimensions[i] = static_cast<uint32_t>(dimensions[i]);
-        header.total_elements *= header.dimensions[i];
-    }
-    
-    // Reserve space for header + compressed data
-    result.resize(sizeof(fpc_tensor_header));
-    std::memcpy(result.data(), &header, sizeof(fpc_tensor_header));
-    
-    // Compress the data
-    auto compressed = fpc_compress(data, level);
-    result.insert(result.end(), compressed.begin(), compressed.end());
-    
-    return result;
-}
-
-// Decompress a tensor with metadata
-template<typename T>
-requires std::floating_point<T>
-[[nodiscard]] std::optional<std::pair<std::vector<T>, std::vector<size_t>>> fpc_decompress_tensor(
-    std::span<const uint8_t> input
-) noexcept {
-    if (input.size() < sizeof(fpc_tensor_header)) {
-        return std::nullopt;
-    }
-    
-    // Read header
-    fpc_tensor_header header;
-    std::memcpy(&header, input.data(), sizeof(fpc_tensor_header));
-    
-    // Extract dimensions
-    std::vector<size_t> dimensions;
-    dimensions.reserve(header.rank);
-    for (uint32_t i = 0; i < header.rank; ++i) {
-        dimensions.push_back(header.dimensions[i]);
-    }
-    
-    // Allocate output buffer
-    std::vector<T> output(header.total_elements);
-    
-    // Decompress data
-    auto compressed_data = input.subspan(sizeof(fpc_tensor_header));
-    size_t decompressed = fpc_decompress(compressed_data, std::span<T>(output.data(), output.size()));
-    
-    if (decompressed != header.total_elements) {
-        return std::nullopt;
-    }
-    
-    return std::make_pair(std::move(output), std::move(dimensions));
-}
-
-// Convenience function for common matrix operations
-template<typename T>
-requires std::floating_point<T>
-struct fpc_matrix_view {
-    std::span<const T> data;
-    size_t rows;
-    size_t cols;
-    
-    [[nodiscard]] std::vector<uint8_t> compress(
-        fpc_compression_level level = fpc_compression_level::DEFAULT
-    ) const noexcept {
-        std::array<size_t, 2> dims = {rows, cols};
-        return fpc_compress_tensor(data, dims, level);
-    }
-};
-
-class lz4 final : public compression_algorithm {
-public:
-    static constexpr size_t MIN_MATCH = 4;          // Minimum match length
-    static constexpr size_t MAX_DISTANCE = 65535;   // Maximum offset (16-bit)
-    static constexpr size_t HASH_TABLE_SIZE = 4096; // Hash table size (12-bit)
-    static constexpr size_t ML_BITS = 4;            // Match length bits in token
-    static constexpr size_t ML_MASK = (1U << ML_BITS) - 1;
-    static constexpr size_t RUN_BITS = 8 - ML_BITS; // Literal length bits
-    static constexpr size_t RUN_MASK = (1U << RUN_BITS) - 1;
-    static constexpr uint8_t LAST_LITERAL_SIZE = 5;  // Minimum end literals
-    static constexpr uint8_t MFLIMIT = 12;           // Minimum input for match
-    lz4() noexcept = default;
-    ~lz4() override = default;
-    [[nodiscard]] size_t max_compressed_size(size_t uncompressed_size) const noexcept override;
-    [[nodiscard]] result<size_t> compress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept override;
-    [[nodiscard]] result<size_t> decompress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept override;
-    [[nodiscard]] result<size_t> compress_hc(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept;
-    [[nodiscard]] result<size_t> compress_fast(
-        std::span<const std::byte> input,
-        std::span<std::byte> output,
-        int acceleration = 1
-    ) noexcept;
-private:
-    [[nodiscard]] static uint32_t hash4(const uint8_t* ptr, uint32_t h) noexcept {
-        // Simple but effective hash function
-        return ((read32(ptr) * 2654435761U) >> (32 - h));
-    }
-    [[nodiscard]] static uint32_t read32(const uint8_t* ptr) noexcept {
-        uint32_t val;
-        std::memcpy(&val, ptr, sizeof(val));
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap32(val);
-        #endif
-        return val;
-    }
-    [[nodiscard]] static uint16_t read16(const uint8_t* ptr) noexcept {
-        uint16_t val;
-        std::memcpy(&val, ptr, sizeof(val));
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap16(val);
-        #endif
-        return val;
-    }
-    static void write16(uint8_t* ptr, uint16_t val) noexcept {
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap16(val);
-        #endif
-        std::memcpy(ptr, &val, sizeof(val));
-    }
-    [[nodiscard]] static size_t count_match(
-        const uint8_t* pIn,
-        const uint8_t* pMatch,
-        const uint8_t* pInLimit
-    ) noexcept;
-    static uint8_t* write_length(
-        uint8_t* op,
-        size_t length,
-        uint8_t* token,
-        bool is_literal
-    ) noexcept;
-    static void wild_copy(uint8_t* dst, const uint8_t* src, uint8_t* dst_end) noexcept;
-};
-class lz4_frame {
-public:
-    static constexpr uint32_t MAGIC = 0x184D2204;  // LZ4 frame magic number
-    struct frame_descriptor {
-        bool content_checksum;
-        bool content_size;
-        bool block_checksum;
-        bool block_independence;
-        uint32_t max_block_size;
-        frame_descriptor() 
-            : content_checksum(false)
-            , content_size(false)
-            , block_checksum(false)
-            , block_independence(true)
-            , max_block_size(65536) {}
-    };
-    [[nodiscard]] static result<std::vector<std::byte>> compress_frame(
-        std::span<const std::byte> input,
-        const frame_descriptor& desc = {}
-    ) noexcept;
-    [[nodiscard]] static result<std::vector<std::byte>> decompress_frame(
-        std::span<const std::byte> input
-    ) noexcept;
-}; }
-
 } // namespace psyfer

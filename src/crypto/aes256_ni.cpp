@@ -11,7 +11,7 @@
 #include <smmintrin.h>  // SSE4.1
 #endif
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 #ifdef __AES__
 
@@ -224,4 +224,4 @@ public:
 
 #endif // __AES__
 
-} // namespace psyfer::crypto
+} // namespace psyfer

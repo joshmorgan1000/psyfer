@@ -7,7 +7,7 @@
 #include <cstring>
 #include <bit>
 
-namespace psyfer::hash {
+namespace psyfer {
 
 // xxHash3 constants
 namespace {
@@ -721,4 +721,4 @@ uint32_t xxhash3_32::hash(std::span<const std::byte> data, uint64_t seed) noexce
     return static_cast<uint32_t>(xxhash3_64::hash(data, seed));
 }
 
-} // namespace psyfer::hash
+} // namespace psyfer

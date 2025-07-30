@@ -48,14 +48,14 @@ void example_sha256_basic() {
     );
     std::array<std::byte, 32> hash;
     
-    hash::sha256::hash(data, hash);
+    psyfer::sha256_hasher::hash(data, hash);
     
     std::cout << "Message: " << message << "\n";
     print_hash("SHA-256", hash);
     
     // Method 2: Streaming hash (useful for large files or streaming data)
     std::cout << "\nStreaming hash example:\n";
-    hash::sha256 hasher;
+    psyfer::sha256_hasher hasher;
     
     // Hash data in chunks
     std::string part1 = "Hello, ";
@@ -84,7 +84,7 @@ void example_sha512() {
     std::string data = "SHA-512 provides 512-bit output for applications requiring higher security margins";
     std::array<std::byte, 64> hash;
     
-    hash::sha512::hash(
+    psyfer::sha512_hasher::hash(
         std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(data.data()), 
             data.size()
@@ -107,7 +107,7 @@ void example_hmac() {
     // Use case: API authentication, message integrity verification
     
     // Generate a secret key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -118,7 +118,7 @@ void example_hmac() {
     
     // Create HMAC-SHA256
     std::array<std::byte, 32> mac;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key.span(),
         std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(message.data()),
@@ -132,7 +132,7 @@ void example_hmac() {
     
     // Verify HMAC (simulating receiver)
     std::array<std::byte, 32> verify_mac;
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key.span(),
         std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(message.data()),
@@ -148,7 +148,7 @@ void example_hmac() {
     std::cout << "\nTampering detection:\n";
     std::string tampered = "{'user': 'alice', 'action': 'transfer', 'amount': 9999}";
     
-    hash::hmac_sha256::hmac(
+    psyfer::hmac_sha256_algorithm::hmac(
         key.span(),
         std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(tampered.data()),
@@ -177,20 +177,20 @@ void example_xxhash3() {
     );
     
     // 32-bit hash (good for hash tables with ~4 billion entries)
-    uint32_t hash32 = hash::xxh3_32::hash(bytes);
+    uint32_t hash32 = psyfer::xxh3_32::hash(bytes);
     std::cout << "xxHash3-32: 0x" << std::hex << hash32 << std::dec << "\n";
     
     // 64-bit hash (good for larger hash tables)
-    uint64_t hash64 = hash::xxh3_64::hash(bytes);
+    uint64_t hash64 = psyfer::xxh3_64::hash(bytes);
     std::cout << "xxHash3-64: 0x" << std::hex << hash64 << std::dec << "\n";
     
     // 128-bit hash (when you need really low collision probability)
-    auto hash128 = hash::xxh3_128::hash(bytes);
+    auto hash128 = psyfer::xxh3_128::hash(bytes);
     std::cout << "xxHash3-128: 0x" << std::hex << hash128.high << hash128.low << std::dec << "\n";
     
     // Custom seed for different hash values
     uint64_t custom_seed = 42;
-    uint64_t seeded_hash = hash::xxh3_64::hash(bytes, custom_seed);
+    uint64_t seeded_hash = psyfer::xxh3_64::hash(bytes, custom_seed);
     std::cout << "xxHash3-64 with seed 42: 0x" << std::hex << seeded_hash << std::dec << "\n";
 }
 
@@ -203,7 +203,7 @@ void example_hash_table() {
     // Custom hasher for std::unordered_map
     struct XxHash3Hasher {
         size_t operator()(const std::string& key) const {
-            return hash::xxh3_64::hash(key);
+            return psyfer::xxh3_64::hash(key);
         }
     };
     
@@ -234,7 +234,7 @@ void example_hash_table() {
     // Show hash distribution
     std::cout << "\nHash values (showing distribution):\n";
     for (size_t i = 0; i < 5; ++i) {
-        uint64_t h = hash::xxh3_64::hash(keys[i]);
+        uint64_t h = psyfer::xxh3_64::hash(keys[i]);
         std::cout << "  " << keys[i] << ": " << (h % 1000) << "\n";
     }
 }
@@ -255,7 +255,7 @@ void example_file_hashing() {
     }
     
     // Hash the file using streaming
-    hash::sha256 hasher;
+    psyfer::sha256_hasher hasher;
     std::ifstream file(filename, std::ios::binary);
     
     if (!file) {
@@ -299,7 +299,7 @@ void example_performance() {
     
     // Generate test data
     std::vector<std::byte> data(1'000'000);  // 1 MB
-    utils::secure_random::generate(data);
+    secure_random::generate(data);
     
     const int iterations = 100;
     
@@ -309,7 +309,7 @@ void example_performance() {
         
         for (int i = 0; i < iterations; ++i) {
             std::array<std::byte, 32> hash;
-            hash::sha256::hash(data, hash);
+            psyfer::sha256_hasher::hash(data, hash);
         }
         
         auto end = std::chrono::high_resolution_clock::now();
@@ -326,7 +326,7 @@ void example_performance() {
         
         for (int i = 0; i < iterations; ++i) {
             std::array<std::byte, 64> hash;
-            hash::sha512::hash(data, hash);
+            psyfer::sha512_hasher::hash(data, hash);
         }
         
         auto end = std::chrono::high_resolution_clock::now();
@@ -342,7 +342,7 @@ void example_performance() {
         auto start = std::chrono::high_resolution_clock::now();
         
         for (int i = 0; i < iterations; ++i) {
-            uint64_t hash = hash::xxh3_64::hash(data);
+            uint64_t hash = psyfer::xxh3_64::hash(data);
             (void)hash;  // Prevent optimization
         }
         
@@ -372,7 +372,7 @@ void example_password_hashing() {
     
     // Generate a random salt
     std::array<std::byte, 16> salt;
-    utils::secure_random::generate(salt);
+    secure_random::generate(salt);
     
     std::cout << "Password: " << password << "\n";
     print_hash("Salt", salt);
@@ -389,7 +389,7 @@ void example_password_hashing() {
     );
     
     // Note: This is a simplified version. Real PBKDF2 is more complex.
-    hash::hmac_sha256 hmac(password_bytes);
+    psyfer::hmac_sha256_algorithm hmac(password_bytes);
     hmac.update(salt);
     
     // Iterate to increase computational cost

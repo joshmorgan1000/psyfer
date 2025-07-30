@@ -86,7 +86,7 @@ void test_sha256() {
             std::cout << "Test " << i << ": \"" << test.input << "\" - ";
         }
         
-        psyfer::hash::sha256 hasher;
+        psyfer::sha256_hasher hasher;
         hasher.update(std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(test.input.data()),
             test.input.size()
@@ -108,7 +108,7 @@ void test_sha256() {
     
     // Test incremental hashing
     std::cout << "\nTesting incremental hashing: ";
-    psyfer::hash::sha256 incremental_hasher;
+    psyfer::sha256_hasher incremental_hasher;
     std::string test_str = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
     
     // Add data in chunks
@@ -132,7 +132,7 @@ void test_sha256() {
     
     // Test reset functionality
     std::cout << "Testing reset functionality: ";
-    psyfer::hash::sha256 reset_hasher;
+    psyfer::sha256_hasher reset_hasher;
     reset_hasher.update(std::span<const std::byte>(
         reinterpret_cast<const std::byte*>("garbage"),
         7
@@ -174,7 +174,7 @@ void test_sha512() {
             std::cout << "Test " << i << ": \"" << test.input << "\" - ";
         }
         
-        psyfer::hash::sha512 hasher;
+        psyfer::sha512_hasher hasher;
         hasher.update(std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(test.input.data()),
             test.input.size()
@@ -205,7 +205,7 @@ void test_edge_cases() {
     
     // Test multiple finalize calls
     std::cout << "Testing multiple finalize calls: ";
-    psyfer::hash::sha256 hasher;
+    psyfer::sha256_hasher hasher;
     hasher.update(std::span<const std::byte>(
         reinterpret_cast<const std::byte*>("test"),
         4
@@ -224,7 +224,7 @@ void test_edge_cases() {
     // Test very large input
     std::cout << "Testing large input (10MB): ";
     std::vector<std::byte> large_data(10 * 1024 * 1024, std::byte{0xAA});
-    psyfer::hash::sha256 large_hasher;
+    psyfer::sha256_hasher large_hasher;
     large_hasher.update(large_data);
     std::array<std::byte, 32> large_hash;
     large_hasher.finalize(large_hash);

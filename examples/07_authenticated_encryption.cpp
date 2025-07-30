@@ -40,7 +40,7 @@ void example_aes_gcm_basic() {
     std::cout << "\n=== Example 1: Basic AES-GCM ===\n";
     
     // Generate key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -48,7 +48,7 @@ void example_aes_gcm_basic() {
     auto& key = *key_result;
     
     // Create cipher
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     
     // Prepare data
     std::string message = "This is a secret message that needs authentication";
@@ -59,7 +59,7 @@ void example_aes_gcm_basic() {
     
     // Generate nonce (96 bits for GCM)
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     // Tag will be computed during encryption
     std::array<std::byte, 16> tag;
@@ -128,13 +128,13 @@ void example_aead_with_aad() {
     std::cout << "AAD: \"" << aad_str << "\"\n";
     
     // Encrypt with AAD
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     std::array<std::byte, 12> nonce;
     std::array<std::byte, 16> tag;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     auto err = cipher.encrypt(plaintext, key->span(), nonce, tag, aad);
     if (err) {
@@ -167,7 +167,7 @@ void example_aead_with_aad() {
 void example_chacha20_poly1305() {
     std::cout << "\n=== Example 3: ChaCha20-Poly1305 ===\n";
     
-    crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     
     // ChaCha20-Poly1305 specifics
     std::cout << "ChaCha20-Poly1305 characteristics:\n";
@@ -177,7 +177,7 @@ void example_chacha20_poly1305() {
     std::cout << "  - Faster than AES-GCM on systems without AES-NI\n";
     
     // Generate key
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     // Test data
@@ -189,7 +189,7 @@ void example_chacha20_poly1305() {
     
     std::array<std::byte, 12> nonce;
     std::array<std::byte, 16> tag;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     // Encrypt
     auto start = std::chrono::high_resolution_clock::now();
@@ -233,14 +233,14 @@ void example_nonce_management() {
     {
         std::cout << "Strategy 1: Random nonces\n";
         
-        crypto::aes256_gcm cipher;
-        auto key = utils::secure_key_256::generate();
+        psyfer::aes256_gcm cipher;
+        auto key = psyfer::secure_key_256::generate();
         if (!key) return;
         
         // Can safely use random nonces with 96-bit size
         for (int i = 0; i < 3; ++i) {
             std::array<std::byte, 12> nonce;
-            utils::secure_random::generate(nonce);
+            secure_random::generate(nonce);
             
             std::cout << "  Message " << i << " nonce: ";
             for (size_t j = 0; j < 4; ++j) {
@@ -274,7 +274,7 @@ void example_nonce_management() {
         
         NonceCounter nc;
         // Set random prefix
-        utils::secure_random::generate(std::span(nc.nonce.data(), 4));
+        secure_random::generate(std::span(nc.nonce.data(), 4));
         
         for (int i = 0; i < 3; ++i) {
             auto nonce = nc.get();
@@ -300,7 +300,7 @@ void example_nonce_management() {
             std::memcpy(nonce.data(), &micros, sizeof(micros));
             
             // Last 4 bytes: random
-            utils::secure_random::generate(std::span(nonce.data() + 8, 4));
+            secure_random::generate(std::span(nonce.data() + 8, 4));
             
             return nonce;
         };
@@ -327,8 +327,8 @@ void example_nonce_management() {
 void example_tag_verification() {
     std::cout << "\n=== Example 5: Authentication Tag Handling ===\n";
     
-    crypto::aes256_gcm cipher;
-    auto key = utils::secure_key_256::generate();
+    psyfer::aes256_gcm cipher;
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     std::string message = "Important message requiring authentication";
@@ -338,7 +338,7 @@ void example_tag_verification() {
     );
     std::array<std::byte, 12> nonce;
     std::array<std::byte, 16> tag;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     
     // Encrypt
     cipher.encrypt(plaintext, key->span(), nonce, tag);
@@ -384,8 +384,8 @@ void example_streaming_aead() {
     const size_t CHUNK_SIZE = 4096;
     const size_t TOTAL_SIZE = 10000;
     
-    crypto::aes256_gcm cipher;
-    auto key = utils::secure_key_256::generate();
+    psyfer::aes256_gcm cipher;
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     // Each chunk gets its own nonce and tag
@@ -413,7 +413,7 @@ void example_streaming_aead() {
         size_t chunk_len = std::min(CHUNK_SIZE, TOTAL_SIZE - offset);
         
         AuthenticatedChunk chunk;
-        utils::secure_random::generate(chunk.nonce);
+        secure_random::generate(chunk.nonce);
         
         // Copy chunk data
         chunk.data.assign(
@@ -476,7 +476,7 @@ void example_streaming_aead() {
 void example_cipher_comparison() {
     std::cout << "\n=== Example 7: AEAD Cipher Comparison ===\n";
     
-    auto key = utils::secure_key_256::generate();
+    auto key = psyfer::secure_key_256::generate();
     if (!key) return;
     
     // Test data of various sizes
@@ -486,15 +486,15 @@ void example_cipher_comparison() {
         std::cout << "\nData size: " << size << " bytes\n";
         
         std::vector<std::byte> data(size);
-        utils::secure_random::generate(data);
+        secure_random::generate(data);
         
         // AES-256-GCM
         {
-            crypto::aes256_gcm cipher;
+            psyfer::aes256_gcm cipher;
             std::vector<std::byte> test_data = data;
             std::array<std::byte, 12> nonce;
             std::array<std::byte, 16> tag;
-            utils::secure_random::generate(nonce);
+            secure_random::generate(nonce);
             
             auto start = std::chrono::high_resolution_clock::now();
             cipher.encrypt(test_data, key->span(), nonce, tag);
@@ -511,11 +511,11 @@ void example_cipher_comparison() {
         
         // ChaCha20-Poly1305
         {
-            crypto::chacha20_poly1305 cipher;
+            psyfer::chacha20_poly1305 cipher;
             std::vector<std::byte> test_data = data;
             std::array<std::byte, 12> nonce;
             std::array<std::byte, 16> tag;
-            utils::secure_random::generate(nonce);
+            secure_random::generate(nonce);
             
             auto start = std::chrono::high_resolution_clock::now();
             cipher.encrypt(test_data, key->span(), nonce, tag);

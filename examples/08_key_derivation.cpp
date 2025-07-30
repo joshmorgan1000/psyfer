@@ -39,13 +39,13 @@ void example_basic_hkdf() {
     std::cout << "\n=== Example 1: Basic HKDF Usage ===\n";
     
     // Master key (could be from key exchange, password, etc.)
-    auto master_key_result = utils::secure_key_256::generate();
+    auto master_key_result = psyfer::secure_key_256::generate();
     if (!master_key_result) return;
     auto& master_key = *master_key_result;
     
     // Derive an encryption key
     std::array<std::byte, 32> encryption_key;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = psyfer::hkdf::derive_sha256(
         master_key.span(),
         std::span<const std::byte>{},  // No salt
         std::as_bytes(std::span("encryption")),  // Context info
@@ -62,7 +62,7 @@ void example_basic_hkdf() {
     
     // Derive a different key from same master
     std::array<std::byte, 32> auth_key;
-    err = kdf::hkdf::derive_sha256(
+    err = psyfer::hkdf::derive_sha256(
         master_key.span(),
         std::span<const std::byte>{},
         std::as_bytes(std::span("authentication")),
@@ -86,7 +86,7 @@ void example_salted_derivation() {
     
     // Shared secret (e.g., from ECDH)
     std::array<std::byte, 32> shared_secret;
-    utils::secure_random::generate(shared_secret);
+    secure_random::generate(shared_secret);
     
     // Different salts for different contexts
     std::string user_id = "user123@example.com";
@@ -97,7 +97,7 @@ void example_salted_derivation() {
     
     // Derive user-specific key
     std::array<std::byte, 32> user_key;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = psyfer::hkdf::derive_sha256(
         shared_secret,
         std::as_bytes(std::span(user_id)),  // Salt
         std::as_bytes(std::span("user-encryption")),  // Info
@@ -110,7 +110,7 @@ void example_salted_derivation() {
     
     // Derive session-specific key
     std::array<std::byte, 32> session_key;
-    err = kdf::hkdf::derive_sha256(
+    err = psyfer::hkdf::derive_sha256(
         shared_secret,
         std::as_bytes(std::span(session_id)),  // Salt
         std::as_bytes(std::span("session-encryption")),  // Info
@@ -123,7 +123,7 @@ void example_salted_derivation() {
     
     // Same inputs should produce same outputs
     std::array<std::byte, 32> user_key2;
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         shared_secret,
         std::as_bytes(std::span(user_id)),
         std::as_bytes(std::span("user-encryption")),
@@ -141,7 +141,7 @@ void example_multiple_keys() {
     std::cout << "\n=== Example 3: Deriving Multiple Keys ===\n";
     
     // Master secret
-    auto master_result = utils::secure_key_256::generate();
+    auto master_result = psyfer::secure_key_256::generate();
     if (!master_result) return;
     auto& master = *master_result;
     
@@ -170,7 +170,7 @@ void example_multiple_keys() {
     
     for (const auto& [purpose, key_span] : key_specs) {
         std::string info = protocol_version + ":" + purpose;
-        auto err = kdf::hkdf::derive_sha256(
+        auto err = psyfer::hkdf::derive_sha256(
             master.span(),
             std::as_bytes(std::span(protocol_version)),
             std::as_bytes(std::span(info)),
@@ -184,7 +184,7 @@ void example_multiple_keys() {
     
     // Derive IVs
     std::string client_iv_info = protocol_version + ":client_iv";
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         master.span(),
         std::as_bytes(std::span(protocol_version)),
         std::as_bytes(std::span(client_iv_info)),
@@ -192,7 +192,7 @@ void example_multiple_keys() {
     );
     
     std::string server_iv_info = protocol_version + ":server_iv";
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         master.span(),
         std::as_bytes(std::span(protocol_version)),
         std::as_bytes(std::span(server_iv_info)),
@@ -210,7 +210,7 @@ void example_variable_length() {
     std::cout << "\n=== Example 4: Variable Length Key Derivation ===\n";
     
     // Input key material
-    auto ikm_result = utils::secure_key_256::generate();
+    auto ikm_result = psyfer::secure_key_256::generate();
     if (!ikm_result) return;
     auto& ikm = *ikm_result;
     
@@ -223,7 +223,7 @@ void example_variable_length() {
     for (size_t length : lengths) {
         std::vector<std::byte> derived_key(length);
         
-        auto err = kdf::hkdf::derive_sha256(
+        auto err = psyfer::hkdf::derive_sha256(
             ikm.span(),
             std::span<const std::byte>{},
             std::as_bytes(std::span("variable-length-test")),
@@ -268,7 +268,7 @@ void example_password_kdf() {
     
     // Derive encryption key
     std::array<std::byte, 32> enc_key;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = psyfer::hkdf::derive_sha256(
         password_bytes,
         salt,
         std::as_bytes(std::span("encryption-2024")),
@@ -281,7 +281,7 @@ void example_password_kdf() {
     
     // Derive authentication key
     std::array<std::byte, 32> auth_key;
-    err = kdf::hkdf::derive_sha256(
+    err = psyfer::hkdf::derive_sha256(
         password_bytes,
         salt,
         std::as_bytes(std::span("authentication-2024")),
@@ -305,7 +305,7 @@ void example_key_hierarchy() {
     std::cout << "\n=== Example 6: Key Hierarchy ===\n";
     
     // Root key (never used directly)
-    auto root_key_result = utils::secure_key_512::generate();
+    auto root_key_result = psyfer::secure_key_512::generate();
     if (!root_key_result) return;
     auto& root_key = *root_key_result;
     
@@ -320,7 +320,7 @@ void example_key_hierarchy() {
     
     // Derive application key
     std::array<std::byte, 32> app_key;
-    kdf::hkdf::derive_sha512(
+    psyfer::hkdf::derive_sha512(
         root_key.span(),
         std::as_bytes(std::span("2024-01-15")),  // Date as salt
         std::as_bytes(std::span("application-master")),
@@ -330,7 +330,7 @@ void example_key_hierarchy() {
     
     // Derive infrastructure key
     std::array<std::byte, 32> infra_key;
-    kdf::hkdf::derive_sha512(
+    psyfer::hkdf::derive_sha512(
         root_key.span(),
         std::as_bytes(std::span("2024-01-15")),
         std::as_bytes(std::span("infrastructure-master")),
@@ -341,7 +341,7 @@ void example_key_hierarchy() {
     // Derive user-specific key from application key
     std::string user_id = "user-12345";
     std::array<std::byte, 32> user_key;
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         app_key,
         std::as_bytes(std::span(user_id)),
         std::as_bytes(std::span("user-encryption")),
@@ -351,7 +351,7 @@ void example_key_hierarchy() {
     
     // Derive service key from application key
     std::array<std::byte, 32> api_key;
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         app_key,
         std::as_bytes(std::span("api-service")),
         std::as_bytes(std::span("api-authentication")),
@@ -361,7 +361,7 @@ void example_key_hierarchy() {
     
     // Derive TLS key from infrastructure key
     std::array<std::byte, 32> tls_key;
-    kdf::hkdf::derive_sha256(
+    psyfer::hkdf::derive_sha256(
         infra_key,
         std::as_bytes(std::span("tls-internal")),
         std::as_bytes(std::span("tls-session-keys")),
@@ -377,7 +377,7 @@ void example_key_rotation() {
     std::cout << "\n=== Example 7: Key Rotation with HKDF ===\n";
     
     // Initial key
-    auto key_v1_result = utils::secure_key_256::generate();
+    auto key_v1_result = psyfer::secure_key_256::generate();
     if (!key_v1_result) return;
     auto& key_v1 = *key_v1_result;
     
@@ -386,7 +386,7 @@ void example_key_rotation() {
     
     // Rotate to v2 using HKDF
     std::array<std::byte, 32> key_v2;
-    auto err = kdf::hkdf::derive_sha256(
+    auto err = psyfer::hkdf::derive_sha256(
         key_v1.span(),
         std::as_bytes(std::span("rotation")),
         std::as_bytes(std::span("version-2")),
@@ -399,7 +399,7 @@ void example_key_rotation() {
     
     // Rotate to v3
     std::array<std::byte, 32> key_v3;
-    err = kdf::hkdf::derive_sha256(
+    err = psyfer::hkdf::derive_sha256(
         key_v2,
         std::as_bytes(std::span("rotation")),
         std::as_bytes(std::span("version-3")),
@@ -429,7 +429,7 @@ void example_domain_separation() {
     std::cout << "\n=== Example 8: Domain Separation ===\n";
     
     // Shared master secret
-    auto master_result = utils::secure_key_256::generate();
+    auto master_result = psyfer::secure_key_256::generate();
     if (!master_result) return;
     auto& master = *master_result;
     
@@ -452,7 +452,7 @@ void example_domain_separation() {
         std::array<std::byte, 32> domain_key;
         
         // Use domain context as info parameter
-        auto err = kdf::hkdf::derive_sha256(
+        auto err = psyfer::hkdf::derive_sha256(
             master.span(),
             std::span<const std::byte>{},
             std::as_bytes(std::span(domain.context)),

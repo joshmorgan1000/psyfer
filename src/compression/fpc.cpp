@@ -8,7 +8,7 @@
 #include <cstring>
 #include <algorithm>
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 namespace {
     /**
@@ -484,4 +484,4 @@ size_t fpc_max_decompressed_size(std::span<const uint8_t> input) noexcept {
     return total;
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

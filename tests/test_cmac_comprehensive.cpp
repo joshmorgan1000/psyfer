@@ -84,7 +84,7 @@ bool test_cmac_128() {
         
         // Test CMAC-128
         std::array<std::byte, 16> cmac_output;
-        psyfer::mac::aes_cmac_128::compute(data_bytes, key_bytes, cmac_output);
+        psyfer::aes_cmac<16>::compute(data_bytes, key_bytes, cmac_output);
         
         bool pass = true;
         for (size_t i = 0; i < 16; ++i) {
@@ -105,7 +105,7 @@ bool test_cmac_128() {
         if (!pass) all_pass = false;
         
         // Also test verification
-        bool verified = psyfer::mac::aes_cmac_128::verify(data_bytes, key_bytes, cmac_output);
+        bool verified = psyfer::aes_cmac<16>::verify(data_bytes, key_bytes, cmac_output);
         std::cout << "Verification: " << (verified ? "PASS" : "FAIL") << "\n";
         
         if (!verified) all_pass = false;
@@ -157,7 +157,7 @@ bool test_cmac_256() {
         
         // Test CMAC-256
         std::array<std::byte, 16> cmac_output;  // CMAC is always 128 bits
-        psyfer::mac::aes_cmac_256::compute(data_bytes, key_bytes, cmac_output);
+        psyfer::aes_cmac<32>::compute(data_bytes, key_bytes, cmac_output);
         
         bool pass = true;
         for (size_t i = 0; i < 16; ++i) {
@@ -186,7 +186,7 @@ void test_cmac_incremental() {
     
     // Test that incremental updates produce same result as one-shot
     std::array<std::byte, 16> key;
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     std::string test_data = "The quick brown fox jumps over the lazy dog. ";
     test_data += test_data; // Make it longer
@@ -196,10 +196,10 @@ void test_cmac_incremental() {
     
     // One-shot CMAC-128
     std::array<std::byte, 16> oneshot_result;
-    psyfer::mac::aes_cmac_128::compute(data, key, oneshot_result);
+    psyfer::aes_cmac<16>::compute(data, key, oneshot_result);
     
     // Incremental CMAC-128
-    psyfer::mac::aes_cmac_128 cmac(key);
+    psyfer::aes_cmac<16> cmac(key);
     cmac.update(std::span<const std::byte>(data.data(), data.size() / 3));
     cmac.update(std::span<const std::byte>(data.data() + data.size() / 3, data.size() / 3));
     cmac.update(std::span<const std::byte>(data.data() + 2 * data.size() / 3, data.size() - 2 * data.size() / 3));
@@ -218,17 +218,17 @@ void test_cmac_edge_cases() {
     std::cout << "\n=== CMAC Edge Cases ===\n";
     
     std::array<std::byte, 16> key;
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     // Test various message sizes around block boundaries
     std::vector<size_t> test_sizes = {0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129};
     
     for (size_t size : test_sizes) {
         std::vector<std::byte> data(size);
-        psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
         
         std::array<std::byte, 16> result;
-        psyfer::mac::aes_cmac_128::compute(data, key, result);
+        psyfer::aes_cmac<16>::compute(data, key, result);
         
         std::cout << "Size " << std::setw(3) << size << " bytes: ";
         print_hex("CMAC", std::span<const std::byte>(result.data(), 8)); // Just show first 8 bytes
@@ -237,10 +237,10 @@ void test_cmac_edge_cases() {
     // Test maximum size message (should handle gracefully)
     std::cout << "\nLarge message test (1MB):\n";
     std::vector<std::byte> large_data(1024 * 1024);
-    psyfer::utils::secure_random::generate(std::span<std::byte>(large_data.data(), 1024)); // Just randomize first 1KB
+    psyfer::secure_random::generate(std::span<std::byte>(large_data.data(), 1024)); // Just randomize first 1KB
     
     std::array<std::byte, 16> large_result;
-    psyfer::mac::aes_cmac_128::compute(large_data, key, large_result);
+    psyfer::aes_cmac<16>::compute(large_data, key, large_result);
     
     std::cout << "1MB CMAC computed successfully\n";
     print_hex("Result", std::span<const std::byte>(large_result.data(), 8));
@@ -251,19 +251,19 @@ void test_cmac_security_properties() {
     
     // Test that changing one bit changes output significantly
     std::array<std::byte, 16> key;
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     std::vector<std::byte> data(64);
-    psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
     
     std::array<std::byte, 16> result1;
-    psyfer::mac::aes_cmac_128::compute(data, key, result1);
+    psyfer::aes_cmac<16>::compute(data, key, result1);
     
     // Change one bit in data
     data[0] = static_cast<std::byte>(static_cast<uint8_t>(data[0]) ^ 0x01);
     
     std::array<std::byte, 16> result2;
-    psyfer::mac::aes_cmac_128::compute(data, key, result2);
+    psyfer::aes_cmac<16>::compute(data, key, result2);
     
     // Count different bits
     int different_bits = 0;
@@ -285,7 +285,7 @@ void test_cmac_security_properties() {
     data[0] = static_cast<std::byte>(static_cast<uint8_t>(data[0]) ^ 0x01); // Restore original
     
     std::array<std::byte, 16> result3;
-    psyfer::mac::aes_cmac_128::compute(data, key2, result3);
+    psyfer::aes_cmac<16>::compute(data, key2, result3);
     
     different_bits = 0;
     for (size_t i = 0; i < 16; ++i) {
@@ -308,19 +308,19 @@ void compare_hardware_vs_software() {
     const size_t data_size = 1024;
     
     std::array<std::byte, 16> key;
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     std::vector<std::byte> data(data_size);
-    psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
     
     std::array<std::byte, 16> result;
     
     // Test with hardware acceleration (if available)
-    psyfer::config::disable_software_only();
+    psyfer::disable_software_only();
     
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; ++i) {
-        psyfer::mac::aes_cmac_128::compute(data, key, result);
+        psyfer::aes_cmac<16>::compute(data, key, result);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto hw_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -333,11 +333,11 @@ void compare_hardware_vs_software() {
     std::array<std::byte, 16> hw_result = result;
     
     // Test with software only
-    psyfer::config::enable_software_only();
+    psyfer::enable_software_only();
     
     start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; ++i) {
-        psyfer::mac::aes_cmac_128::compute(data, key, result);
+        psyfer::aes_cmac<16>::compute(data, key, result);
     }
     end = std::chrono::high_resolution_clock::now();
     auto sw_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -361,7 +361,7 @@ void compare_hardware_vs_software() {
     }
     
     // Reset to default
-    psyfer::config::disable_software_only();
+    psyfer::disable_software_only();
 }
 
 

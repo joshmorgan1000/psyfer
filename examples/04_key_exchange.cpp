@@ -36,14 +36,14 @@ void example_basic_key_exchange() {
     std::cout << "\n=== Example 1: Basic X25519 Key Exchange ===\n";
     
     // Alice generates her key pair
-    auto alice_keypair = crypto::x25519::key_pair::generate();
+    auto alice_keypair = psyfer::x25519::key_pair::generate();
     if (!alice_keypair) {
         std::cerr << "Failed to generate Alice's key pair\n";
         return;
     }
     
     // Bob generates his key pair
-    auto bob_keypair = crypto::x25519::key_pair::generate();
+    auto bob_keypair = psyfer::x25519::key_pair::generate();
     if (!bob_keypair) {
         std::cerr << "Failed to generate Bob's key pair\n";
         return;
@@ -89,8 +89,8 @@ void example_shared_secret_encryption() {
     std::cout << "\n=== Example 2: Encryption with Shared Secret ===\n";
     
     // Generate key pairs
-    auto alice_kp = crypto::x25519::key_pair::generate();
-    auto bob_kp = crypto::x25519::key_pair::generate();
+    auto alice_kp = psyfer::x25519::key_pair::generate();
+    auto bob_kp = psyfer::x25519::key_pair::generate();
     if (!alice_kp || !bob_kp) return;
     
     // Compute shared secret
@@ -100,7 +100,7 @@ void example_shared_secret_encryption() {
     
     // Derive encryption key from shared secret using HKDF
     std::array<std::byte, 32> enc_key;
-    err = kdf::hkdf::derive_sha256(
+    err = hkdf::derive_sha256(
         shared_secret,
         std::span<const std::byte>{}, // No salt
         std::as_bytes(std::span("encryption-key")),
@@ -122,10 +122,10 @@ void example_shared_secret_encryption() {
     );
     
     std::array<std::byte, 12> nonce;
-    utils::secure_random::generate(nonce);
+    secure_random::generate(nonce);
     std::array<std::byte, 16> tag;
     
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     err = cipher.encrypt(plaintext, enc_key, nonce, tag);
     if (err) {
         std::cerr << "Encryption failed\n";
@@ -156,7 +156,7 @@ void example_group_key_exchange() {
     // Create multiple participants
     struct Participant {
         std::string name;
-        crypto::x25519::key_pair keypair;
+        psyfer::x25519::key_pair keypair;
     };
     
     std::vector<Participant> participants;
@@ -164,7 +164,7 @@ void example_group_key_exchange() {
     
     // Generate key pairs for all participants
     for (const auto& name : names) {
-        auto kp = crypto::x25519::key_pair::generate();
+        auto kp = psyfer::x25519::key_pair::generate();
         if (!kp) {
             std::cerr << "Failed to generate key pair for " << name << "\n";
             return;
@@ -216,15 +216,15 @@ void example_performance() {
     auto start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < iterations; ++i) {
-        auto kp = crypto::x25519::key_pair::generate();
+        auto kp = psyfer::x25519::key_pair::generate();
         if (!kp) break;
     }
     
     auto keygen_time = std::chrono::high_resolution_clock::now() - start;
     
     // Benchmark shared secret computation
-    auto alice_kp = crypto::x25519::key_pair::generate();
-    auto bob_kp = crypto::x25519::key_pair::generate();
+    auto alice_kp = psyfer::x25519::key_pair::generate();
+    auto bob_kp = psyfer::x25519::key_pair::generate();
     if (!alice_kp || !bob_kp) return;
     
     std::array<std::byte, 32> shared;
@@ -263,7 +263,7 @@ void example_key_validation() {
     std::array<std::byte, 32> zero_key{};
     std::array<std::byte, 32> public_key;
     
-    auto err = crypto::x25519::derive_public_key(zero_key, public_key);
+    auto err = psyfer::x25519::derive_public_key(zero_key, public_key);
     
     std::cout << "All-zero private key:\n";
     if (err) {
@@ -277,7 +277,7 @@ void example_key_validation() {
     std::array<std::byte, 32> max_key;
     std::fill(max_key.begin(), max_key.end(), std::byte{0xFF});
     
-    err = crypto::x25519::derive_public_key(max_key, public_key);
+    err = psyfer::x25519::derive_public_key(max_key, public_key);
     
     std::cout << "\nAll-0xFF private key:\n";
     if (err) {
@@ -289,9 +289,9 @@ void example_key_validation() {
     
     // Test proper random key
     std::array<std::byte, 32> random_key;
-    utils::secure_random::generate(random_key);
+    secure_random::generate(random_key);
     
-    err = crypto::x25519::derive_public_key(random_key, public_key);
+    err = psyfer::x25519::derive_public_key(random_key, public_key);
     
     std::cout << "\nRandom private key:\n";
     if (err) {
@@ -310,7 +310,7 @@ void example_forward_secrecy() {
     std::cout << "\n=== Example 6: Forward Secrecy ===\n";
     
     // Alice has a long-term key pair
-    auto alice_long_term = crypto::x25519::key_pair::generate();
+    auto alice_long_term = psyfer::x25519::key_pair::generate();
     if (!alice_long_term) return;
     
     std::cout << "Alice's long-term public key:\n";
@@ -321,7 +321,7 @@ void example_forward_secrecy() {
     
     for (int session = 1; session <= 3; ++session) {
         // Bob generates ephemeral key for this session
-        auto bob_ephemeral = crypto::x25519::key_pair::generate();
+        auto bob_ephemeral = psyfer::x25519::key_pair::generate();
         if (!bob_ephemeral) continue;
         
         // Compute session shared secret

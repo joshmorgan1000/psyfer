@@ -12,7 +12,7 @@
 #include <openssl/x509.h>
 #endif
 
-namespace psyfer::crypto {
+namespace psyfer {
 
 #ifdef HAVE_OPENSSL
 static constexpr bool use_openssl = true;
@@ -36,7 +36,7 @@ std::error_code x25519::generate_private_key(
 #endif
     
     // Generate random bytes
-    if (auto ec = utils::secure_random::generate(private_key); ec) {
+    if (auto ec = secure_random::generate(private_key); ec) {
         return ec;
     }
     
@@ -125,7 +125,7 @@ std::expected<x25519::key_pair, std::error_code> x25519::key_pair::generate() no
     
     // Clear private key on destruction
     auto cleanup = [&kp]() {
-        utils::secure_clear(kp.private_key.data(), PRIVATE_KEY_SIZE);
+        secure_clear(kp.private_key.data(), PRIVATE_KEY_SIZE);
     };
     struct cleanup_guard {
         std::function<void()> fn;
@@ -578,4 +578,4 @@ void x25519::scalarmult(uint8_t* out, const uint8_t* scalar, const uint8_t* poin
     fe_tobytes(out, x2);
 }
 
-} // namespace psyfer::crypto
+} // namespace psyfer

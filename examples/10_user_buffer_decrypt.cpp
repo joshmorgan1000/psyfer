@@ -36,7 +36,7 @@ void example_aes_gcm_user_buffer() {
     std::cout << "\n=== Example 1: AES-256-GCM Decrypt to User Buffer ===\n";
     
     // Generate a key and nonce
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -45,7 +45,7 @@ void example_aes_gcm_user_buffer() {
     
     // Generate a random nonce
     std::array<std::byte, 12> nonce;
-    auto nonce_err = utils::secure_random::generate(nonce);
+    auto nonce_err = secure_random::generate(nonce);
     if (nonce_err) {
         std::cerr << "Failed to generate nonce\n";
         return;
@@ -63,7 +63,7 @@ void example_aes_gcm_user_buffer() {
     
     // Encrypt the data
     std::array<std::byte, 16> tag;
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     
     auto encrypt_err = cipher.encrypt(encrypted_data, key.span(), nonce, tag);
     if (encrypt_err) {
@@ -174,7 +174,7 @@ void example_chacha20_custom_memory() {
     BufferPool pool;
     
     // Get encryption key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -183,7 +183,7 @@ void example_chacha20_custom_memory() {
     
     // Generate nonce
     std::array<std::byte, 12> nonce;
-    auto nonce_err = utils::secure_random::generate(nonce);
+    auto nonce_err = secure_random::generate(nonce);
     if (nonce_err) {
         std::cerr << "Failed to generate nonce\n";
         return;
@@ -210,7 +210,7 @@ void example_chacha20_custom_memory() {
     
     // Encrypt in place
     std::array<std::byte, 16> tag;
-    crypto::chacha20_poly1305 cipher;
+    psyfer::chacha20_poly1305 cipher;
     
     auto encrypt_err = cipher.encrypt(data_span, key.span(), nonce, tag);
     if (encrypt_err) {
@@ -253,7 +253,7 @@ void example_variable_length_data() {
     };
     
     // Generate key
-    auto key_result = utils::secure_key_256::generate();
+    auto key_result = psyfer::secure_key_256::generate();
     if (!key_result) {
         std::cerr << "Failed to generate key\n";
         return;
@@ -270,7 +270,7 @@ void example_variable_length_data() {
     };
     
     std::vector<EncryptedMessage> encrypted_messages;
-    crypto::aes256_gcm cipher;
+    psyfer::aes256_gcm cipher;
     
     // Encrypt all messages
     for (const auto& msg : messages) {
@@ -282,7 +282,7 @@ void example_variable_length_data() {
         std::memcpy(enc_msg.data.data(), msg.data(), msg.size());
         
         // Generate unique nonce for each message
-        utils::secure_random::generate(enc_msg.nonce);
+        secure_random::generate(enc_msg.nonce);
         
         // Encrypt
         auto err = cipher.encrypt(enc_msg.data, key.span(), enc_msg.nonce, enc_msg.tag);

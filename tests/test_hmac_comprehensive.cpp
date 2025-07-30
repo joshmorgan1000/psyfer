@@ -101,7 +101,7 @@ bool test_hmac_sha256() {
         
         // Test HMAC-SHA256
         std::array<std::byte, 32> hmac256_output;
-        psyfer::hash::hmac_sha256::hmac(key_bytes, data_bytes, hmac256_output);
+        psyfer::hmac_sha256_algorithm::hmac(key_bytes, data_bytes, hmac256_output);
         
         // Convert expected to bytes for comparison
         auto expected_bytes = hex_to_bytes(tv.hmac_sha256_expected);
@@ -161,7 +161,7 @@ bool test_hmac_sha512() {
         
         // Test HMAC-SHA512
         std::array<std::byte, 64> hmac512_output;
-        psyfer::hash::hmac_sha512::hmac(key_bytes, data_bytes, hmac512_output);
+        psyfer::hmac_sha512_algorithm::hmac(key_bytes, data_bytes, hmac512_output);
         
         // Convert expected to bytes for comparison
         auto expected_bytes = hex_to_bytes(tv.hmac_sha512_expected);
@@ -189,7 +189,7 @@ void test_hmac_incremental() {
     
     // Test incremental updates produce same result as one-shot
     std::vector<std::byte> key(32);
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     std::string test_data = "The quick brown fox jumps over the lazy dog. ";
     test_data += test_data; // Make it longer
@@ -199,10 +199,10 @@ void test_hmac_incremental() {
     
     // One-shot HMAC-SHA256
     std::array<std::byte, 32> oneshot_result;
-    psyfer::hash::hmac_sha256::hmac(key, data, oneshot_result);
+    psyfer::hmac_sha256_algorithm::hmac(key, data, oneshot_result);
     
     // Incremental HMAC-SHA256
-    psyfer::hash::hmac_sha256 hmac(key);
+    psyfer::hmac_sha256_algorithm hmac(key);
     hmac.update(std::span<const std::byte>(data.data(), data.size() / 2));
     hmac.update(std::span<const std::byte>(data.data() + data.size() / 2, data.size() - data.size() / 2));
     
@@ -222,29 +222,29 @@ void test_hmac_edge_cases() {
     // Empty key (should still work)
     std::vector<std::byte> empty_key;
     std::vector<std::byte> data(16);
-    psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
     
     std::array<std::byte, 32> result1;
-    psyfer::hash::hmac_sha256::hmac(empty_key, data, result1);
+    psyfer::hmac_sha256_algorithm::hmac(empty_key, data, result1);
     std::cout << "Empty key test: ";
     print_hex("Result", result1);
     
     // Empty data
     std::vector<std::byte> key(32);
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     std::vector<std::byte> empty_data;
     
     std::array<std::byte, 32> result2;
-    psyfer::hash::hmac_sha256::hmac(key, empty_data, result2);
+    psyfer::hmac_sha256_algorithm::hmac(key, empty_data, result2);
     std::cout << "\nEmpty data test: ";
     print_hex("Result", result2);
     
     // Very large key (> block size)
     std::vector<std::byte> large_key(256);
-    psyfer::utils::secure_random::generate(large_key);
+    psyfer::secure_random::generate(large_key);
     
     std::array<std::byte, 32> result3;
-    psyfer::hash::hmac_sha256::hmac(large_key, data, result3);
+    psyfer::hmac_sha256_algorithm::hmac(large_key, data, result3);
     std::cout << "\nLarge key test (256 bytes): ";
     print_hex("Result", result3);
 }
@@ -255,7 +255,7 @@ void test_hmac_security_properties() {
     
     // Test that changing one bit of key changes output significantly
     std::vector<std::byte> key1(32);
-    psyfer::utils::secure_random::generate(key1);
+    psyfer::secure_random::generate(key1);
     
     std::vector<std::byte> key2 = key1;
     key2[0] = static_cast<std::byte>(static_cast<uint8_t>(key2[0]) ^ 0x01);  // Flip one bit
@@ -265,8 +265,8 @@ void test_hmac_security_properties() {
     std::memcpy(data.data(), test_data.data(), test_data.size());
     
     std::array<std::byte, 32> result1, result2;
-    psyfer::hash::hmac_sha256::hmac(key1, data, result1);
-    psyfer::hash::hmac_sha256::hmac(key2, data, result2);
+    psyfer::hmac_sha256_algorithm::hmac(key1, data, result1);
+    psyfer::hmac_sha256_algorithm::hmac(key2, data, result2);
     
     // Count different bits
     int different_bits = 0;
@@ -286,7 +286,7 @@ void test_hmac_security_properties() {
     data2[0] = static_cast<std::byte>(static_cast<uint8_t>(data2[0]) ^ 0x01);
     
     std::array<std::byte, 32> result3;
-    psyfer::hash::hmac_sha256::hmac(key1, data2, result3);
+    psyfer::hmac_sha256_algorithm::hmac(key1, data2, result3);
     
     different_bits = 0;
     for (size_t i = 0; i < 32; ++i) {
@@ -308,19 +308,19 @@ void compare_hardware_vs_software() {
     const size_t data_size = 1024;
     
     std::vector<std::byte> key(32);
-    psyfer::utils::secure_random::generate(key);
+    psyfer::secure_random::generate(key);
     
     std::vector<std::byte> data(data_size);
-    psyfer::utils::secure_random::generate(data);
+    psyfer::secure_random::generate(data);
     
     std::array<std::byte, 32> result;
     
     // Test with hardware acceleration (if available)
-    psyfer::config::disable_software_only();
+    psyfer::disable_software_only();
     
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; ++i) {
-        psyfer::hash::hmac_sha256::hmac(key, data, result);
+        psyfer::hmac_sha256_algorithm::hmac(key, data, result);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto hw_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -333,11 +333,11 @@ void compare_hardware_vs_software() {
     std::array<std::byte, 32> hw_result = result;
     
     // Test with software only
-    psyfer::config::enable_software_only();
+    psyfer::enable_software_only();
     
     start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; ++i) {
-        psyfer::hash::hmac_sha256::hmac(key, data, result);
+        psyfer::hmac_sha256_algorithm::hmac(key, data, result);
     }
     end = std::chrono::high_resolution_clock::now();
     auto sw_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -356,7 +356,7 @@ void compare_hardware_vs_software() {
     }
     
     // Reset to default
-    psyfer::config::disable_software_only();
+    psyfer::disable_software_only();
 }
 
 int main() {

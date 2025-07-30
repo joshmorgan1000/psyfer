@@ -20,11 +20,6 @@
 #include <fstream>
 #include <sstream>
 
-// Using specific namespaces to avoid ambiguity
-namespace crypto = psyfer::crypto;
-namespace utils = psyfer::utils;
-namespace kdf = psyfer::kdf;
-
 /**
  * @brief Generate repetitive text data (good for compression)
  */
@@ -70,7 +65,7 @@ std::vector<std::byte> generate_random_data(size_t size) {
 void example_lz4_basic() {
     std::cout << "\n=== Example 1: Basic LZ4 Compression ===\n";
     
-    crypto::lz4 compressor;
+    psyfer::lz4 compressor;
     
     // Test 1: Compress text data
     {
@@ -152,7 +147,7 @@ void example_fpc_compression() {
             sensor_data.push_back(value);
         }
         
-        auto compressed = crypto::fpc_compress(sensor_data);
+        auto compressed = psyfer::fpc_compress(sensor_data);
         double ratio = (sensor_data.size() * sizeof(double)) / double(compressed.size());
         
         std::cout << "  Original size:    " << sensor_data.size() * sizeof(double) << " bytes\n";
@@ -162,7 +157,7 @@ void example_fpc_compression() {
         
         // Decompress
         std::vector<double> decompressed(sensor_data.size());
-        size_t count = crypto::fpc_decompress(compressed, decompressed);
+        size_t count = psyfer::fpc_decompress(compressed, decompressed);
         
         std::cout << "  Decompressed: " << count << " values\n";
         
@@ -187,7 +182,7 @@ void example_fpc_compression() {
             prices.push_back(std::round(price_dist(gen) * 100) / 100); // 2 decimal places
         }
         
-        auto compressed = crypto::fpc_compress(prices);
+        auto compressed = psyfer::fpc_compress(prices);
         double ratio = (prices.size() * sizeof(double)) / double(compressed.size());
         
         std::cout << "  Original size:    " << prices.size() * sizeof(double) << " bytes\n";
@@ -201,10 +196,10 @@ void example_fpc_compression() {
         std::cout << "\nCompression level comparison:\n";
         std::vector<double> data(1000, 3.14159265359);
         
-        for (auto level : {crypto::fpc_compression_level::MIN,
-                          crypto::fpc_compression_level::DEFAULT,
-                          crypto::fpc_compression_level::MAX}) {
-            auto compressed = crypto::fpc_compress(data, level);
+        for (auto level : {psyfer::fpc_compression_level::MIN,
+                          psyfer::fpc_compression_level::DEFAULT,
+                          psyfer::fpc_compression_level::MAX}) {
+            auto compressed = psyfer::fpc_compress(data, level);
             std::cout << "  Level " << static_cast<int>(level) << ": " 
                       << compressed.size() << " bytes\n";
         }
@@ -217,7 +212,7 @@ void example_fpc_compression() {
 void example_lz4_high_compression() {
     std::cout << "\n=== Example 3: LZ4 High Compression Mode ===\n";
     
-    crypto::lz4 compressor;
+    psyfer::lz4 compressor;
     
     // Generate JSON-like data (highly compressible)
     std::stringstream json;
@@ -268,7 +263,7 @@ void example_streaming_compression() {
     std::cout << "\n=== Example 4: Streaming Compression ===\n";
     
     // Simulate compressing a large file in chunks
-    crypto::lz4 compressor;
+    psyfer::lz4 compressor;
     
     // Create test data
     std::string line = "This is a line of log data that will be repeated many times.\n";
@@ -366,7 +361,7 @@ void example_performance() {
         byte = static_cast<std::byte>(dis(gen));
     }
     
-    crypto::lz4 compressor;
+    psyfer::lz4 compressor;
     
     // Benchmark function
     auto benchmark = [&](const std::string& name, const std::vector<std::byte>& data) {
@@ -439,9 +434,9 @@ void example_multidimensional_fpc() {
     std::cout << "2D Temperature Grid (" << rows << "x" << cols << "):\n";
     
     // Compress using FPC
-    auto compressed = crypto::fpc_compress_2d(
+    auto compressed = psyfer::fpc_compress_2d(
         std::span<const double>(temperature_grid), rows, cols, 
-        crypto::fpc_compression_level::DEFAULT
+        psyfer::fpc_compression_level::DEFAULT
     );
     
     size_t original_size = temperature_grid.size() * sizeof(double);
@@ -454,7 +449,7 @@ void example_multidimensional_fpc() {
     
     // Compress with tensor metadata
     std::vector<size_t> dims = {rows, cols};
-    auto tensor_compressed = crypto::fpc_compress_tensor(std::span<const double>(temperature_grid), dims);
+    auto tensor_compressed = psyfer::fpc_compress_tensor(std::span<const double>(temperature_grid), dims);
     
     std::cout << "\nWith tensor metadata:\n";
     std::cout << "  Compressed size:  " << tensor_compressed.size() << " bytes\n";
@@ -462,7 +457,7 @@ void example_multidimensional_fpc() {
               << " bytes\n";
     
     // Decompress and verify
-    auto decompressed_result = crypto::fpc_decompress_tensor<double>(tensor_compressed);
+    auto decompressed_result = psyfer::fpc_decompress_tensor<double>(tensor_compressed);
     if (decompressed_result) {
         auto& [data, recovered_dims] = *decompressed_result;
         std::cout << "  Decompressed successfully\n";

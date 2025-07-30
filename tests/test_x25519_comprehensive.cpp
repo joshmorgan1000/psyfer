@@ -89,7 +89,7 @@ void test_known_vectors() {
         // Test Alice's public key derivation
         std::cout << "  Alice's public key derivation: ";
         std::array<std::byte, 32> alice_pub_derived;
-        auto ec = psyfer::crypto::x25519::derive_public_key(alice_private, alice_pub_derived);
+        auto ec = psyfer::x25519::derive_public_key(alice_private, alice_pub_derived);
         
         if (ec) {
             std::cout << "FAILED (" << ec.message() << ")" << std::endl;
@@ -109,7 +109,7 @@ void test_known_vectors() {
         // Test Bob's public key derivation
         std::cout << "  Bob's public key derivation: ";
         std::array<std::byte, 32> bob_pub_derived;
-        ec = psyfer::crypto::x25519::derive_public_key(bob_private, bob_pub_derived);
+        ec = psyfer::x25519::derive_public_key(bob_private, bob_pub_derived);
         
         if (ec) {
             std::cout << "FAILED (" << ec.message() << ")" << std::endl;
@@ -129,7 +129,7 @@ void test_known_vectors() {
         // Test shared secret computation (Alice's side)
         std::cout << "  Alice computes shared secret: ";
         std::array<std::byte, 32> alice_shared;
-        ec = psyfer::crypto::x25519::compute_shared_secret(alice_private, bob_public, alice_shared);
+        ec = psyfer::x25519::compute_shared_secret(alice_private, bob_public, alice_shared);
         
         if (ec) {
             std::cout << "FAILED (" << ec.message() << ")" << std::endl;
@@ -149,7 +149,7 @@ void test_known_vectors() {
         // Test shared secret computation (Bob's side)
         std::cout << "  Bob computes shared secret: ";
         std::array<std::byte, 32> bob_shared;
-        ec = psyfer::crypto::x25519::compute_shared_secret(bob_private, alice_public, bob_shared);
+        ec = psyfer::x25519::compute_shared_secret(bob_private, alice_public, bob_shared);
         
         if (ec) {
             std::cout << "FAILED (" << ec.message() << ")" << std::endl;
@@ -186,14 +186,14 @@ void test_key_exchange() {
     std::cout << "\n=== Testing Key Generation and Exchange ===" << std::endl;
     
     // Generate Alice's key pair
-    auto alice_kp = psyfer::crypto::x25519::key_pair::generate();
+    auto alice_kp = psyfer::x25519::key_pair::generate();
     if (!alice_kp.has_value()) {
         std::cout << "Alice key generation FAILED" << std::endl;
         return;
     }
     
     // Generate Bob's key pair
-    auto bob_kp = psyfer::crypto::x25519::key_pair::generate();
+    auto bob_kp = psyfer::x25519::key_pair::generate();
     if (!bob_kp.has_value()) {
         std::cout << "Bob key generation FAILED" << std::endl;
         return;
@@ -237,8 +237,8 @@ void test_security_properties() {
     std::cout << "\n=== Testing Security Properties ===" << std::endl;
     
     // Generate two key pairs
-    auto kp1 = psyfer::crypto::x25519::key_pair::generate();
-    auto kp2 = psyfer::crypto::x25519::key_pair::generate();
+    auto kp1 = psyfer::x25519::key_pair::generate();
+    auto kp2 = psyfer::x25519::key_pair::generate();
     
     if (!kp1.has_value() || !kp2.has_value()) {
         std::cout << "Key generation failed" << std::endl;
@@ -268,7 +268,7 @@ void test_security_properties() {
     
     // Test 3: Different key pairs produce different shared secrets
     std::cout << "Different pairs produce different secrets: ";
-    auto kp3 = psyfer::crypto::x25519::key_pair::generate();
+    auto kp3 = psyfer::x25519::key_pair::generate();
     if (!kp3.has_value()) {
         std::cout << "FAILED (key generation)" << std::endl;
         return;
@@ -295,7 +295,7 @@ void test_edge_cases() {
     std::array<std::byte, 32> zero_private{};
     std::array<std::byte, 32> zero_public;
     
-    auto ec = psyfer::crypto::x25519::derive_public_key(zero_private, zero_public);
+    auto ec = psyfer::x25519::derive_public_key(zero_private, zero_public);
     
     // X25519 should handle this gracefully (by clamping)
     if (!ec) {
@@ -309,7 +309,7 @@ void test_edge_cases() {
     std::array<std::byte, 32> low_order_point{};
     low_order_point[0] = std::byte{1};
     
-    auto kp = psyfer::crypto::x25519::key_pair::generate();
+    auto kp = psyfer::x25519::key_pair::generate();
     if (!kp.has_value()) {
         std::cout << "FAILED (key generation)" << std::endl;
         return;
@@ -331,8 +331,8 @@ void test_edge_cases() {
     std::vector<std::array<std::byte, 32>> secrets;
     
     for (int i = 0; i < 10; ++i) {
-        auto alice = psyfer::crypto::x25519::key_pair::generate();
-        auto bob = psyfer::crypto::x25519::key_pair::generate();
+        auto alice = psyfer::x25519::key_pair::generate();
+        auto bob = psyfer::x25519::key_pair::generate();
         
         if (!alice.has_value() || !bob.has_value()) {
             std::cout << "FAILED (key generation)" << std::endl;
