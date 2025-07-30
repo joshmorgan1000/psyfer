@@ -45,3 +45,4 @@ build/
 CMakeCache.txt
 .claude/
 .vscode/
+run_builder.sh
