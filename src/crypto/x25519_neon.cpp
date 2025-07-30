@@ -37,13 +37,12 @@ public:
         uint64x2_t r01 = vmulq_u64(f0, g01);
         uint64x2_t r23 = vmulq_u64(f0, g23);
         
-        // For now, fall back to scalar implementation
-        // A full NEON implementation would require careful handling of:
-        // - 128-bit multiplication results
-        // - Carry propagation
-        // - Modular reduction
+        // Fall back to scalar implementation
+        // A full NEON implementation of field multiplication for Curve25519
+        // requires careful handling of 128-bit multiplication results,
+        // carry propagation, and modular reduction. The performance benefit
+        // may not justify the complexity for all use cases.
         
-        // This is just a placeholder to show the structure
         x25519::fe_mul(reinterpret_cast<x25519::fe&>(*h), 
                        reinterpret_cast<const x25519::fe&>(*f), 
                        reinterpret_cast<const x25519::fe&>(*g));

@@ -43,6 +43,7 @@ private:
     void generate_struct_impls();
     void generate_struct_impl(const Struct& st);
     void generate_serialization_impl(const Struct& st);
+    void generate_deserialization_impl(const Struct& st);
     void generate_encryption_impl(const Struct& st);
     void generate_compression_impl(const Struct& st);
     void generate_signing_impl(const Struct& st);
@@ -52,11 +53,18 @@ private:
     [[nodiscard]] std::string get_encryption_algorithm(const Field& field) const;
     [[nodiscard]] std::string get_encryption_algorithm(const Struct& st) const;
     
+    // Compression handling
+    [[nodiscard]] std::string get_compression_algorithm(const Field& field) const;
+    [[nodiscard]] std::string get_compression_algorithm(const Struct& st) const;
+    
     // Helper methods
     void emit(const std::string& text);
     void emit_line(const std::string& text = "");
     void indent();
     void dedent();
+    [[nodiscard]] bool has_encrypted_fields(const Struct& st) const;
+    [[nodiscard]] bool has_compressed_fields(const Struct& st) const;
+    [[nodiscard]] std::string primitive_type_name(PrimitiveType type) const;
     
     const Schema& schema_;
     GeneratorOptions options_;

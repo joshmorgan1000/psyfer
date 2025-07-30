@@ -3,7 +3,7 @@
  * @brief AES-NI hardware accelerated implementation
  */
 
-#include <psyfer/crypto/aes256.hpp>
+#include <psyfer.hpp>
 
 #ifdef __AES__
 #include <wmmintrin.h>  // AES-NI intrinsics

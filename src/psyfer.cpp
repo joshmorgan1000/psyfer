@@ -32,6 +32,10 @@ std::string error_category_impl::message(int ev) const {
             return "Memory allocation failed";
         case error_code::not_implemented:
             return "Not implemented";
+        case error_code::crypto_error:
+            return "Cryptographic operation failed";
+        case error_code::buffer_too_small:
+            return "Buffer too small";
         case error_code::unknown_error:
             return "Unknown error";
         default:

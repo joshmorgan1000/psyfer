@@ -1,0 +1,15 @@
+namespace compression_test;
+
+struct CompressedData {
+    id: uint64;
+    
+    @compress(algorithm=lz4)
+    data: bytes;
+}
+
+struct NumericData {
+    timestamp: uint64;
+    
+    @compress(algorithm=fpc)
+    values: list<float64>;
+}

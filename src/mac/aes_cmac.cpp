@@ -3,9 +3,7 @@
  * @brief AES-CMAC implementation
  */
 
-#include <psyfer/mac/aes_cmac.hpp>
-#include <psyfer/utils/secure.hpp>
-#include <psyfer/crypto/aes128.hpp>
+#include <psyfer.hpp>
 #include <cstring>
 
 namespace psyfer::mac {

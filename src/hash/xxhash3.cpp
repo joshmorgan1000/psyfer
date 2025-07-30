@@ -3,7 +3,7 @@
  * @brief xxHash3 implementation
  */
 
-#include <psyfer/hash/xxhash3.hpp>
+#include <psyfer.hpp>
 #include <cstring>
 #include <bit>
 
@@ -526,14 +526,22 @@ namespace {
 
 // xxHash3 24-bit specific helpers
 namespace {
+    // 24-bit specific primes for better distribution in 24-bit space
+    // Based on golden ratio like other xxHash primes, with good bit distribution
+    constexpr uint32_t PRIME24_1 = 10368881U;  // 0x9E3771 - near 2^24/φ, 58.3% ones
+    constexpr uint32_t PRIME24_2 = 10368899U;  // 0x9E3783 - near 2^24/φ, 54.2% ones
+    
     // xxHash3 24-bit avalanche - tuned for 24-bit output
     [[nodiscard]] inline uint32_t xxh24_avalanche(uint32_t h) noexcept {
-        h ^= h >> 12;
-        h *= PRIME32_3;
-        h ^= h >> 11;
-        h *= PRIME32_1;
+        h &= 0xFFFFFF;  // Ensure we're in 24-bit range
         h ^= h >> 10;
-        return h & 0xFFFFFF;  // Mask to 24 bits
+        h *= PRIME24_1;
+        h &= 0xFFFFFF;  // Keep in 24-bit range after multiply
+        h ^= h >> 12;
+        h *= PRIME24_2;
+        h &= 0xFFFFFF;  // Keep in 24-bit range after multiply
+        h ^= h >> 14;
+        return h;
     }
     
     // Process 1-3 bytes for 24-bit
@@ -564,11 +572,17 @@ namespace {
     ) noexcept {
         uint32_t data32_1 = read32_le(data);
         uint32_t data32_2 = read32_le(data + len - 4);
-        // Mix down to 24 bits
-        uint32_t mixed = data32_1 + std::rotl(data32_2, 13);
+        
+        // Use multiplication for better mixing (like the 64-bit version)
+        uint64_t data64 = static_cast<uint64_t>(data32_1) + (static_cast<uint64_t>(data32_2) << 24);
         uint32_t bitflip = static_cast<uint32_t>(
             read32_le(reinterpret_cast<const std::byte*>(secret + 8)) ^ seed);
-        return xxh24_avalanche((mixed ^ bitflip) & 0xFFFFFF);
+        
+        // Mix with multiplication
+        uint64_t mixed = data64 * PRIME24_1;
+        uint32_t result = static_cast<uint32_t>(mixed ^ (mixed >> 32) ^ bitflip);
+        
+        return xxh24_avalanche(result & 0xFFFFFF);
     }
     
     // Process 9-16 bytes for 24-bit
@@ -581,14 +595,21 @@ namespace {
         uint64_t data_lo = read64_le(data);
         uint64_t data_hi = read64_le(data + len - 8);
         
-        // Fold 128 bits down to 24 bits with good mixing
-        uint32_t fold1 = static_cast<uint32_t>(data_lo) ^ static_cast<uint32_t>(data_lo >> 32);
-        uint32_t fold2 = static_cast<uint32_t>(data_hi) ^ static_cast<uint32_t>(data_hi >> 32);
-        uint32_t mixed = fold1 + std::rotl(fold2, 11);
+        // Better mixing for 24-bit output - use multiplication to spread bits
+        uint64_t bitflip = read64_le(reinterpret_cast<const std::byte*>(secret + 24)) ^ 
+                          read64_le(reinterpret_cast<const std::byte*>(secret + 32)) ^ seed;
         
-        uint32_t bitflip = static_cast<uint32_t>(
-            read64_le(reinterpret_cast<const std::byte*>(secret + 24)) ^ seed);
-        return xxh24_avalanche((mixed ^ bitflip ^ static_cast<uint32_t>(len)) & 0xFFFFFF);
+        // Mix with multiplication to ensure good distribution
+        uint64_t mixed = (data_lo ^ bitflip) * PRIME64_1;
+        mixed ^= (data_hi ^ std::rotl(bitflip, 23)) * PRIME64_2;
+        mixed ^= mixed >> 37;
+        mixed *= PRIME64_3;
+        
+        // Fold down to 24 bits
+        uint32_t result = static_cast<uint32_t>(mixed) ^ static_cast<uint32_t>(mixed >> 32);
+        result = (result ^ static_cast<uint32_t>(len)) * PRIME24_1;
+        
+        return xxh24_avalanche(result & 0xFFFFFF);
     }
 }
 

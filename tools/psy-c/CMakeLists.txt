@@ -12,6 +12,7 @@ set(PSY_C_SOURCES
     src/parser.cpp
     src/ast.cpp
     src/code_generator.cpp
+    src/impl_generator.cpp
     src/type_system.cpp
     src/schema.cpp
 )
@@ -44,26 +45,7 @@ install(TARGETS psy-c
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-# Test executable
-add_executable(test_psy test_psy.cpp)
-target_link_libraries(test_psy PRIVATE psyfer)
-target_include_directories(test_psy PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-# Full pipeline test
-add_executable(test_full_pipeline test_full_pipeline.cpp)
-target_link_libraries(test_full_pipeline PRIVATE psyfer)
-target_include_directories(test_full_pipeline PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-# Simple compression test
-add_executable(test_simple_compression test_simple_compression.cpp)
-target_link_libraries(test_simple_compression PRIVATE psyfer)
-target_include_directories(test_simple_compression PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/include
-)
+# Tests subdirectory
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    add_subdirectory(tests)
+endif()

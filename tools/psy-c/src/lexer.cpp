@@ -31,7 +31,8 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords_ = {
     {"float32", TokenType::FLOAT32},
     {"float64", TokenType::FLOAT64},
     {"bytes", TokenType::BYTES},
-    {"text", TokenType::TEXT}
+    {"text", TokenType::TEXT},
+    {"string", TokenType::TEXT}  // Alias for text
 };
 
 Lexer::Lexer(std::string_view input, const std::string& filename)
@@ -55,6 +56,12 @@ Token Lexer::next_token() {
     // Comments
     if (ch == '#') {
         skip_comment();
+        return next_token();
+    }
+    
+    // C++ style comments
+    if (ch == '/' && peek_ahead(1) == '/') {
+        skip_cpp_comment();
         return next_token();
     }
     
@@ -138,6 +145,17 @@ void Lexer::skip_comment() {
     }
 }
 
+void Lexer::skip_cpp_comment() {
+    // Skip the //
+    advance_char();
+    advance_char();
+    
+    // Skip until end of line
+    while (!is_eof() && peek_char() != '\n') {
+        advance_char();
+    }
+}
+
 char Lexer::peek_char(size_t offset) const noexcept {
     size_t pos = current_ + offset;
     return pos < input_.size() ? input_[pos] : '\0';
@@ -150,6 +168,10 @@ char Lexer::advance_char() noexcept {
         return ch;
     }
     return '\0';
+}
+
+char Lexer::peek_ahead(size_t offset) const noexcept {
+    return peek_char(offset);
 }
 
 Token Lexer::read_identifier() {

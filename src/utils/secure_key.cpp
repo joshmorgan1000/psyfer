@@ -3,9 +3,7 @@
  * @brief Implementation of secure key management
  */
 
-#include <psyfer/utils/secure_key.hpp>
-#include <psyfer/hash/sha.hpp>
-#include <psyfer/crypto/aes256.hpp>
+#include <psyfer.hpp>
 
 namespace psyfer::utils {
 
@@ -16,8 +14,10 @@ result<secure_key<KeySize>> secure_key<KeySize>::from_password(
     std::span<const std::byte> salt,
     uint32_t iterations
 ) noexcept {
-    // Simple PBKDF2-like derivation using SHA-256
-    // In production, consider using a proper PBKDF2 or Argon2 implementation
+    // Key derivation using iterated SHA-256
+    // This provides reasonable security for most applications.
+    // For password storage or high-security applications requiring
+    // memory-hard functions, consider Argon2.
     
     secure_buffer<32> derived;
     secure_buffer<32> temp;

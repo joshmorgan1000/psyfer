@@ -3,7 +3,7 @@
  * @brief ARM64 hardware accelerated AES implementation
  */
 
-#include <psyfer/crypto/aes256.hpp>
+#include <psyfer.hpp>
 #include <cstring>
 
 #ifdef __aarch64__

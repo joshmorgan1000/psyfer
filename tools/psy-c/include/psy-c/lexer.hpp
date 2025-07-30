@@ -117,8 +117,10 @@ public:
 private:
     void skip_whitespace();
     void skip_comment();
+    void skip_cpp_comment();
     
     [[nodiscard]] char peek_char(size_t offset = 0) const noexcept;
+    [[nodiscard]] char peek_ahead(size_t offset) const noexcept;
     char advance_char() noexcept;
     
     [[nodiscard]] Token read_identifier();

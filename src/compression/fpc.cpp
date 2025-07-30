@@ -3,7 +3,7 @@
  * @brief FPC (Fast Pfor Compression) implementation
  */
 
-#include <psyfer/compression/fpc.hpp>
+#include <psyfer.hpp>
 #include <bit>
 #include <cstring>
 #include <algorithm>

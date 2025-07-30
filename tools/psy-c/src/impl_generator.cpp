@@ -37,9 +37,13 @@ void ImplGenerator::generate_header() {
 }
 
 void ImplGenerator::generate_includes() {
-    emit_line("#include \"generated.hpp\"");
+    // Include the corresponding header file
+    if (!options_.output_header_file.empty()) {
+        emit_line("#include \"" + options_.output_header_file + "\"");
+    } else {
+        emit_line("#include \"generated.hpp\"");
+    }
     emit_line("#include <psyfer.hpp>");
-    emit_line("#include <psyfer/serialization/psy_runtime.hpp>");
     emit_line();
 }
 
@@ -79,6 +83,7 @@ void ImplGenerator::generate_struct_impls() {
 
 void ImplGenerator::generate_struct_impl(const Struct& st) {
     generate_serialization_impl(st);
+    generate_deserialization_impl(st);
     
     if (st.has_annotation("encrypt") || has_encrypted_fields(st)) {
         generate_encryption_impl(st);
@@ -86,6 +91,10 @@ void ImplGenerator::generate_struct_impl(const Struct& st) {
     
     if (st.has_annotation("compress") || has_compressed_fields(st)) {
         generate_compression_impl(st);
+    }
+    
+    if (st.has_annotation("sign")) {
+        generate_signing_impl(st);
     }
 }
 
@@ -125,20 +134,35 @@ void ImplGenerator::generate_serialization_impl(const Struct& st) {
                     emit_line("size += field_header_size(" + field_num + ") + 8;");
                     break;
                 case PrimitiveType::BYTES:
-                    emit_line("size += field_header_size(" + field_num + ") + " +
-                            "bytes_field_size(" + field->name + ".size());");
+                    if (field->type.optional) {
+                        emit_line("if (" + field->name + ") {");
+                        indent();
+                        emit_line("size += field_header_size(" + field_num + ") + " +
+                                "bytes_field_size(" + field->name + "->size());");
+                        dedent();
+                        emit_line("}");
+                    } else {
+                        emit_line("size += field_header_size(" + field_num + ") + " +
+                                "bytes_field_size(" + field->name + ".size());");
+                    }
                     break;
                 case PrimitiveType::TEXT:
-                    emit_line("size += field_header_size(" + field_num + ") + " +
-                            "string_field_size(" + field->name + ");");
+                    if (field->type.optional) {
+                        emit_line("if (" + field->name + ") {");
+                        indent();
+                        emit_line("size += field_header_size(" + field_num + ") + " +
+                                "string_field_size(*" + field->name + ");");
+                        dedent();
+                        emit_line("}");
+                    } else {
+                        emit_line("size += field_header_size(" + field_num + ") + " +
+                                "string_field_size(" + field->name + ");");
+                    }
                     break;
             }
         }
         
-        if (field->type.optional) {
-            // Wrap in if statement
-            // TODO: Implement optional handling
-        }
+        // Optional handling is implemented within each type's case above
     }
     
     emit_line("return size;");
@@ -181,39 +205,57 @@ void ImplGenerator::generate_serialization_impl(const Struct& st) {
                     break;
                 case PrimitiveType::BYTES:
                 case PrimitiveType::TEXT:
+                    if (field->type.optional) {
+                        emit_line("if (" + field->name + ") {");
+                        indent();
+                    }
                     emit_line("writer.write_field_header(" + field_num + ", WireType::BYTES);");
                     break;
             }
             
+            // For non-bytes/text optional fields, wrap here
+            if (field->type.optional && 
+                prim_type != PrimitiveType::BYTES && 
+                prim_type != PrimitiveType::TEXT) {
+                emit_line("if (" + field->name + ") {");
+                indent();
+            }
+            
             // Write value
+            std::string deref = field->type.optional ? "*" : "";
             switch (prim_type) {
                 case PrimitiveType::BOOL:
-                    emit_line("writer.write_varint(" + field->name + " ? 1 : 0);");
+                    emit_line("writer.write_varint(" + deref + field->name + " ? 1 : 0);");
                     break;
                 case PrimitiveType::INT8:
                 case PrimitiveType::INT16:
                 case PrimitiveType::INT32:
                 case PrimitiveType::INT64:
-                    emit_line("writer.write_signed_varint(" + field->name + ");");
+                    emit_line("writer.write_signed_varint(" + deref + field->name + ");");
                     break;
                 case PrimitiveType::UINT8:
                 case PrimitiveType::UINT16:
                 case PrimitiveType::UINT32:
                 case PrimitiveType::UINT64:
-                    emit_line("writer.write_varint(" + field->name + ");");
+                    emit_line("writer.write_varint(" + deref + field->name + ");");
                     break;
                 case PrimitiveType::FLOAT32:
-                    emit_line("writer.write_f32(" + field->name + ");");
+                    emit_line("writer.write_f32(" + deref + field->name + ");");
                     break;
                 case PrimitiveType::FLOAT64:
-                    emit_line("writer.write_f64(" + field->name + ");");
+                    emit_line("writer.write_f64(" + deref + field->name + ");");
                     break;
                 case PrimitiveType::BYTES:
-                    emit_line("writer.write_bytes_field(" + field->name + ");");
+                    emit_line("writer.write_bytes_field(" + deref + field->name + ");");
                     break;
                 case PrimitiveType::TEXT:
-                    emit_line("writer.write_string_field(" + field->name + ");");
+                    emit_line("writer.write_string_field(" + deref + field->name + ");");
                     break;
+            }
+            
+            if (field->type.optional) {
+                dedent();
+                emit_line("}");
             }
         }
         
@@ -221,6 +263,166 @@ void ImplGenerator::generate_serialization_impl(const Struct& st) {
     }
     
     emit_line("return writer.position();");
+    dedent();
+    emit_line("}");
+}
+
+void ImplGenerator::generate_deserialization_impl(const Struct& st) {
+    // Generate serialize() that returns vector
+    emit_line();
+    emit_line("std::vector<std::byte> " + st.name + "::serialize() const {");
+    indent();
+    emit_line("std::vector<std::byte> buffer(serialized_size());");
+    emit_line("serialize(buffer);");
+    emit_line("return buffer;");
+    dedent();
+    emit_line("}");
+    
+    // Generate static deserialize method
+    emit_line();
+    emit_line("std::optional<" + st.name + "> " + st.name + "::deserialize(");
+    indent();
+    emit_line("std::span<const std::byte> buffer");
+    dedent();
+    emit_line(") noexcept {");
+    indent();
+    emit_line("using namespace psyfer::serialization;");
+    emit_line("BufferReader reader(buffer);");
+    emit_line(st.name + " result;");
+    emit_line();
+    
+    // Read each field
+    for (size_t i = 0; i < st.fields.size(); ++i) {
+        const auto& field = st.fields[i];
+        std::string field_num = std::to_string(i + 1);
+        
+        if (field->type.is_primitive()) {
+            auto prim_type = std::get<PrimitiveType>(field->type.kind);
+            
+            // Read field header
+            emit_line("// Field " + field_num + ": " + field->name);
+            emit_line("auto header" + field_num + " = reader.read_field_header();");
+            emit_line("if (!header" + field_num + " || header" + field_num + "->field_number != " + 
+                     field_num + ") {");
+            indent();
+            
+            if (field->type.optional) {
+                emit_line("// Optional field, skip if not present");
+                emit_line("result." + field->name + " = std::nullopt;");
+            } else {
+                emit_line("return std::nullopt; // Required field missing");
+            }
+            
+            dedent();
+            emit_line("} else {");
+            indent();
+            
+            // Read value based on type
+            switch (prim_type) {
+                case PrimitiveType::BOOL:
+                    emit_line("auto val = reader.read_varint();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = (*val != 0);");
+                    } else {
+                        emit_line("result." + field->name + " = (*val != 0);");
+                    }
+                    break;
+                    
+                case PrimitiveType::INT8:
+                case PrimitiveType::INT16:
+                case PrimitiveType::INT32:
+                case PrimitiveType::INT64:
+                    emit_line("auto val = reader.read_signed_varint();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = static_cast<" + 
+                                 primitive_type_name(prim_type) + ">(*val);");
+                    } else {
+                        emit_line("result." + field->name + " = static_cast<" + 
+                                 primitive_type_name(prim_type) + ">(*val);");
+                    }
+                    break;
+                    
+                case PrimitiveType::UINT8:
+                case PrimitiveType::UINT16:
+                case PrimitiveType::UINT32:
+                case PrimitiveType::UINT64:
+                    emit_line("auto val = reader.read_varint();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = static_cast<" + 
+                                 primitive_type_name(prim_type) + ">(*val);");
+                    } else {
+                        emit_line("result." + field->name + " = static_cast<" + 
+                                 primitive_type_name(prim_type) + ">(*val);");
+                    }
+                    break;
+                    
+                case PrimitiveType::FLOAT32:
+                    emit_line("auto val = reader.read_f32();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = *val;");
+                    } else {
+                        emit_line("result." + field->name + " = *val;");
+                    }
+                    break;
+                    
+                case PrimitiveType::FLOAT64:
+                    emit_line("auto val = reader.read_f64();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = *val;");
+                    } else {
+                        emit_line("result." + field->name + " = *val;");
+                    }
+                    break;
+                    
+                case PrimitiveType::BYTES:
+                    emit_line("auto val = reader.read_bytes_field();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = std::vector<std::byte>(val->begin(), val->end());");
+                    } else {
+                        emit_line("result." + field->name + ".assign(val->begin(), val->end());");
+                    }
+                    break;
+                    
+                case PrimitiveType::TEXT:
+                    emit_line("auto val = reader.read_string_field();");
+                    emit_line("if (!val) return std::nullopt;");
+                    if (field->type.optional) {
+                        emit_line("result." + field->name + " = *val;");
+                    } else {
+                        emit_line("result." + field->name + " = *val;");
+                    }
+                    break;
+            }
+            
+            dedent();
+            emit_line("}");
+            emit_line();
+        }
+    }
+    
+    emit_line("return result;");
+    dedent();
+    emit_line("}");
+    
+    // Generate zero-copy deserialize method
+    emit_line();
+    emit_line("size_t " + st.name + "::deserialize(");
+    indent();
+    emit_line("std::span<const std::byte> source_buffer,");
+    emit_line(st.name + "* target");
+    dedent();
+    emit_line(") noexcept {");
+    indent();
+    emit_line("auto result = deserialize(source_buffer);");
+    emit_line("if (!result) return 0;");
+    emit_line("*target = std::move(*result);");
+    emit_line("return source_buffer.size();");
     dedent();
     emit_line("}");
 }
@@ -287,19 +489,20 @@ void ImplGenerator::generate_encryption_impl(const Struct& st) {
         dedent();
         emit_line(");");
     } else if (algo == "chacha20" || algo == "chacha20_poly1305") {
-        emit_line("auto result = psyfer::crypto::chacha20_poly1305::encrypt_oneshot(");
+        emit_line("psyfer::crypto::chacha20_poly1305 cipher;");
+        emit_line("auto result = cipher.encrypt(");
         indent();
         emit_line("data_start.subspan(0, serialized_size),");
-        emit_line("std::span<const std::byte, 32>(key.data(), 32),");
-        emit_line("std::span<const std::byte, 12>(nonce.data(), 12),");
-        emit_line("std::span<std::byte, 16>(tag.data(), 16),");
+        emit_line("std::span<const std::byte>(key.data(), 32),");
+        emit_line("std::span<const std::byte>(nonce.data(), 12),");
+        emit_line("std::span<std::byte>(tag.data(), 16),");
         emit_line("{}  // no AAD");
         dedent();
         emit_line(");");
     }
     
     emit_line();
-    emit_line("if (result != psyfer::error_code::success) {");
+    emit_line("if (result) {");
     indent();
     emit_line("return 0;");
     dedent();
@@ -345,19 +548,20 @@ void ImplGenerator::generate_encryption_impl(const Struct& st) {
         dedent();
         emit_line(");");
     } else if (algo == "chacha20" || algo == "chacha20_poly1305") {
-        emit_line("auto result = psyfer::crypto::chacha20_poly1305::decrypt_oneshot(");
+        emit_line("psyfer::crypto::chacha20_poly1305 cipher;");
+        emit_line("auto result = cipher.decrypt(");
         indent();
         emit_line("decrypted,");
-        emit_line("std::span<const std::byte, 32>(key.data(), 32),");
-        emit_line("std::span<const std::byte, 12>(nonce.data(), 12),");
-        emit_line("std::span<const std::byte, 16>(tag.data(), 16),");
+        emit_line("std::span<const std::byte>(key.data(), 32),");
+        emit_line("std::span<const std::byte>(nonce.data(), 12),");
+        emit_line("std::span<const std::byte>(tag.data(), 16),");
         emit_line("{}  // no AAD");
         dedent();
         emit_line(");");
     }
     
     emit_line();
-    emit_line("if (result != psyfer::error_code::success) {");
+    emit_line("if (result) {");
     indent();
     emit_line("return std::nullopt;");
     dedent();
@@ -372,7 +576,150 @@ void ImplGenerator::generate_encryption_impl(const Struct& st) {
 }
 
 void ImplGenerator::generate_compression_impl(const Struct& st) {
-    // TODO: Implement compression methods
+    // Determine compression algorithm
+    std::string algo = get_compression_algorithm(st);
+    
+    emit_line();
+    emit_line("// Compression implementation");
+    
+    // compressed_size
+    emit_line("size_t " + st.name + "::compressed_size() const noexcept {");
+    indent();
+    
+    if (algo == "lz4") {
+        emit_line("// LZ4: worst case is slightly larger than input");
+        emit_line("size_t input_size = serialized_size();");
+        emit_line("return input_size + (input_size/255) + 16;");
+    } else if (algo == "fpc") {
+        emit_line("// FPC: worst case for floating point compression");
+        emit_line("return serialized_size() + serialized_size() / 8 + 16;");
+    } else {
+        emit_line("// Default: assume 2x expansion worst case");
+        emit_line("return serialized_size() * 2;");
+    }
+    
+    dedent();
+    emit_line("}");
+    emit_line();
+    
+    // compress method
+    emit_line("size_t " + st.name + "::compress(");
+    indent();
+    emit_line("std::span<std::byte> buffer");
+    dedent();
+    emit_line(") const noexcept {");
+    indent();
+    
+    emit_line("// Serialize first");
+    emit_line("std::vector<std::byte> serialized(serialized_size());");
+    emit_line("size_t serialized_len = serialize(serialized);");
+    emit_line();
+    
+    if (algo == "lz4") {
+        emit_line("// Compress with LZ4");
+        emit_line("psyfer::compression::lz4 compressor;");
+        emit_line("auto result = compressor.compress(");
+        indent();
+        emit_line("std::span(serialized.data(), serialized_len),");
+        emit_line("buffer");
+        dedent();
+        emit_line(");");
+        emit_line("return result ? *result : 0;");
+    } else if (algo == "fpc") {
+        emit_line("// FPC is for floating point data compression");
+        emit_line("// TODO: Field-level FPC compression is not yet implemented");
+        emit_line("// For now, using LZ4 as a fallback for all compression");
+        emit_line("psyfer::compression::lz4 compressor;");
+        emit_line("auto result = compressor.compress(");
+        indent();
+        emit_line("std::span(serialized.data(), serialized_len),");
+        emit_line("buffer");
+        dedent();
+        emit_line(");");
+        emit_line("return result ? *result : 0;");
+    } else {
+        emit_line("// Unsupported compression algorithm: " + algo);
+        emit_line("static_assert(false, \"Unsupported compression algorithm\");");
+        emit_line("return 0;");
+    }
+    
+    dedent();
+    emit_line("}");
+    emit_line();
+    
+    // compress to vector method
+    emit_line("std::vector<std::byte> " + st.name + "::compress() const {");
+    indent();
+    emit_line("std::vector<std::byte> result(compressed_size());");
+    emit_line("size_t compressed_len = compress(result);");
+    emit_line("result.resize(compressed_len);");
+    emit_line("return result;");
+    dedent();
+    emit_line("}");
+    emit_line();
+    
+    // decompress method
+    emit_line("std::optional<" + st.name + "> " + st.name + "::decompress(");
+    indent();
+    emit_line("std::span<const std::byte> buffer");
+    dedent();
+    emit_line(") noexcept {");
+    indent();
+    
+    emit_line("// Allocate decompression buffer");
+    emit_line("std::vector<std::byte> decompressed;");
+    emit_line();
+    
+    if (algo == "lz4") {
+        emit_line("// Decompress with LZ4");
+        emit_line("// First, try to determine uncompressed size");
+        emit_line("psyfer::compression::lz4 decompressor;");
+        emit_line("// Allocate a reasonable buffer (assume 10x expansion)");
+        emit_line("decompressed.resize(buffer.size() * 10);");
+        emit_line("auto result = decompressor.decompress(buffer, decompressed);");
+        emit_line("if (!result) return std::nullopt;");
+        emit_line("decompressed.resize(*result);");
+    } else if (algo == "fpc") {
+        emit_line("// FPC decompression (falling back to LZ4 for struct-level)");
+        emit_line("psyfer::compression::lz4 decompressor;");
+        emit_line("// First, allocate a reasonable buffer");
+        emit_line("decompressed.resize(buffer.size() * 10);");
+        emit_line("auto result = decompressor.decompress(buffer, decompressed);");
+        emit_line("if (result) {");
+        emit_line("    decompressed.resize(*result);");
+        emit_line("} else {");
+        emit_line("    return std::nullopt;");
+        emit_line("}");
+    } else {
+        emit_line("// Unsupported compression algorithm: " + algo);
+        emit_line("static_assert(false, \"Unsupported compression algorithm\");");
+        emit_line("return std::nullopt;");
+    }
+    
+    emit_line();
+    emit_line("// Deserialize decompressed data");
+    emit_line("return deserialize(decompressed);");
+    
+    dedent();
+    emit_line("}");
+    emit_line();
+    
+    // decompress to target method
+    emit_line("size_t " + st.name + "::decompress(");
+    indent();
+    emit_line("std::span<const std::byte> source_buffer,");
+    emit_line(st.name + "* target");
+    dedent();
+    emit_line(") noexcept {");
+    indent();
+    
+    emit_line("auto result = decompress(source_buffer);");
+    emit_line("if (!result) return 0;");
+    emit_line("*target = std::move(*result);");
+    emit_line("return 1;  // Success");
+    
+    dedent();
+    emit_line("}");
 }
 
 void ImplGenerator::generate_signing_impl(const Struct& st) {
@@ -529,6 +876,30 @@ std::string ImplGenerator::get_encryption_algorithm(const Struct& st) const {
     return algo.value_or("aes256");
 }
 
+std::string ImplGenerator::get_compression_algorithm(const Struct& st) const {
+    auto ann = st.get_annotation("compress");
+    if (!ann) {
+        // Check if any field is compressed and use that algorithm
+        for (const auto& field : st.fields) {
+            if (field->has_annotation("compress")) {
+                return get_compression_algorithm(*field);
+            }
+        }
+        return "lz4";
+    }
+    
+    auto algo = ann->get_parameter("algorithm");
+    return algo.value_or("lz4");
+}
+
+std::string ImplGenerator::get_compression_algorithm(const Field& field) const {
+    auto ann = field.get_annotation("compress");
+    if (!ann) return "lz4";
+    
+    auto algo = ann->get_parameter("algorithm");
+    return algo.value_or("lz4");
+}
+
 bool ImplGenerator::has_encrypted_fields(const Struct& st) const {
     for (const auto& field : st.fields) {
         if (field->has_annotation("encrypt")) {
@@ -566,6 +937,25 @@ void ImplGenerator::dedent() {
     if (indent_level_ > 0) {
         indent_level_--;
     }
+}
+
+std::string ImplGenerator::primitive_type_name(PrimitiveType type) const {
+    switch (type) {
+        case PrimitiveType::BOOL: return "bool";
+        case PrimitiveType::INT8: return "int8_t";
+        case PrimitiveType::INT16: return "int16_t";
+        case PrimitiveType::INT32: return "int32_t";
+        case PrimitiveType::INT64: return "int64_t";
+        case PrimitiveType::UINT8: return "uint8_t";
+        case PrimitiveType::UINT16: return "uint16_t";
+        case PrimitiveType::UINT32: return "uint32_t";
+        case PrimitiveType::UINT64: return "uint64_t";
+        case PrimitiveType::FLOAT32: return "float";
+        case PrimitiveType::FLOAT64: return "double";
+        case PrimitiveType::BYTES: return "std::vector<std::byte>";
+        case PrimitiveType::TEXT: return "std::string";
+    }
+    return "unknown";
 }
 
 } // namespace psyc

@@ -3,8 +3,7 @@
  * @brief HKDF implementation using CommonCrypto on Apple platforms
  */
 
-#include <psyfer/kdf/hkdf.hpp>
-#include <psyfer/hash/sha.hpp>
+#include <psyfer.hpp>
 #include <cstring>
 
 #ifdef __APPLE__

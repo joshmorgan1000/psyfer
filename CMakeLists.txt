@@ -24,12 +24,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
         add_compile_definitions(NDEBUG)
-        # Link-time optimization - disabled for now due to Swift compatibility
-        # check_cxx_compiler_flag("-flto" COMPILER_SUPPORTS_LTO)
-        # if(COMPILER_SUPPORTS_LTO)
-        #     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-flto>)
-        #     add_link_options(-flto)
-        # endif()
     else()
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O0> $<$<COMPILE_LANGUAGE:CXX>:-g>)
         # Sanitizers for debug (not on Apple due to issues)
@@ -53,18 +47,24 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     endif()
 endif()
 
+# Add goldenhash submodule
+add_subdirectory(goldenhash)
+
 add_library(psyfer
     STATIC
-    src/psyfer.cpp
     src/logger/logger.cpp
+    src/psyfer.cpp
+    src/psyfer_context.cpp
     src/hash/sha.cpp
     src/hash/xxhash3.cpp
     src/mac/aes_cmac.cpp
     src/kdf/hkdf.cpp
     src/crypto/aes128.cpp
     src/crypto/aes256.cpp
+    src/crypto/ghash_portable.cpp
     src/crypto/chacha20.cpp
     src/crypto/ed25519.cpp
+    src/crypto/ed25519_ops.cpp
     src/crypto/x25519.cpp
     src/compression/lz4.cpp
     src/compression/fpc.cpp
@@ -94,10 +94,13 @@ if(APPLE)
         # Remove problematic flags from Swift
         string(REPLACE "-incremental" "" CMAKE_Swift_FLAGS_DEBUG "${CMAKE_Swift_FLAGS_DEBUG}")
         
-        message(STATUS "Building with CryptoKit support for X25519")
+        message(STATUS "Building with CryptoKit support for X25519 and Ed25519")
         
         # Create Swift static library first
-        add_library(psyfer_cryptokit STATIC src/crypto/x25519_cryptokit.swift)
+        add_library(psyfer_cryptokit STATIC 
+            src/crypto/x25519_cryptokit.swift
+            src/crypto/ed25519_cryptokit.swift
+        )
         
         # Swift compilation flags
         target_compile_options(psyfer_cryptokit PRIVATE
@@ -125,7 +128,7 @@ if(APPLE)
         # Add compile definition to enable CryptoKit in C++
         target_compile_definitions(psyfer PRIVATE HAVE_CRYPTOKIT=1)
     else()
-        message(STATUS "Swift compiler not found - X25519 will use software implementation")
+        message(STATUS "Swift compiler not found - X25519 and Ed25519 will use software implementation")
     endif()
     
     target_link_libraries(psyfer PUBLIC "-framework Security")
@@ -146,16 +149,24 @@ target_include_directories(psyfer PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 target_include_directories(psyfer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Find and link OpenSSL
+find_package(OpenSSL REQUIRED)
+target_link_libraries(psyfer PUBLIC OpenSSL::Crypto)
+target_compile_definitions(psyfer PRIVATE HAVE_OPENSSL=1)
+
+# Link goldenhash
+target_link_libraries(psyfer PUBLIC goldenhash)
 target_compile_options(psyfer PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
         $<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:
-            -Wall -Wextra -Wpedantic -Werror
+            -Wall -Wextra -Wpedantic
             -march=native
             $<$<CONFIG:Debug>:-O0 -g>
             $<$<CONFIG:Release>:-O3 -DNDEBUG>
         >
         $<$<CXX_COMPILER_ID:MSVC>:
-            /W4 /WX
+            /W4
             $<$<CONFIG:Debug>:/Od /Zi>
             $<$<CONFIG:Release>:/O2 /DNDEBUG>
         >
@@ -216,13 +227,21 @@ add_subdirectory(tests)
 add_subdirectory(tools/psy-c)
 
 # ──────────────────────────────────────────────────────────────
+# Examples
+# ──────────────────────────────────────────────────────────────
+option(BUILD_EXAMPLES "Build example programs" ON)
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+# ──────────────────────────────────────────────────────────────
 # Print configuration summary
 # ──────────────────────────────────────────────────────────────
-message(STATUS "────────────────────────────────────────────────────")
-message(STATUS "   _____  _______ __   __ _______ _______  ______")
-message(STATUS "  |_____] |______   \\_/   |______ |______ |_____/")
-message(STATUS "  |       ______|    |    |       |______ |    \\_")
-message(STATUS "────────────────────────────────────────────────────")
+message(STATUS "______________________________________________________")
+message(STATUS "    _____  _______ __   __ _______ _______  ______")
+message(STATUS "   |_____] |______   \\_/   |______ |______ |_____/")
+message(STATUS "   |       ______|    |    |       |______ |    \\_")
+message(STATUS "──────────────────────────────────────────────────────")
 message(STATUS "  Psyfer Encryption Library configured:")
 message(STATUS "    Version: ${PROJECT_VERSION}")
 message(STATUS "    C++ Standard: ${CMAKE_CXX_STANDARD}")

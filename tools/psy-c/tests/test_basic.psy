@@ -1,0 +1,16 @@
+namespace test;
+
+struct SimpleMessage {
+    id: uint64;
+    content: string;
+}
+
+@encrypt(algorithm="aes256")
+struct SecureData {
+    data: bytes;
+}
+
+@encrypt(algorithm="chacha20")
+struct SecureDoc {
+    content: string;
+}

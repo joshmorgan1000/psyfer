@@ -3,7 +3,7 @@
  * @brief AES-256 implementation using CommonCrypto (macOS/iOS)
  */
 
-#include <psyfer/crypto/aes256.hpp>
+#include <psyfer.hpp>
 
 #ifdef __APPLE__
 #include <CommonCrypto/CommonCryptor.h>

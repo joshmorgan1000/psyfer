@@ -3,7 +3,7 @@
  * @brief Implementation of secure utilities
  */
 
-#include <psyfer/utils/secure.hpp>
+#include <psyfer.hpp>
 #include <fcntl.h>
 #include <cstdlib>
 #include <cerrno>

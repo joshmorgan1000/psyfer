@@ -6,6 +6,7 @@
 #include "psy-c/code_generator.hpp"
 #include <algorithm>
 #include <cctype>
+#include <functional>
 
 namespace psyc {
 
@@ -143,7 +144,10 @@ void CodeGenerator::generate_enum(const Enum& en) {
 }
 
 void CodeGenerator::generate_structs() {
-    for (const auto& st : schema_.structs) {
+    // Sort structs by dependencies
+    auto sorted_structs = topological_sort_structs();
+    
+    for (const auto& st : sorted_structs) {
         generate_struct(*st);
         emit_line();
     }
@@ -547,6 +551,86 @@ std::string CodeGenerator::sanitize_identifier(const std::string& id) const {
     std::string result = id;
     std::transform(result.begin(), result.end(), result.begin(), ::toupper);
     return result;
+}
+
+std::vector<const Struct*> CodeGenerator::topological_sort_structs() const {
+    std::vector<const Struct*> result;
+    std::set<std::string> visited;
+    std::set<std::string> visiting;
+    
+    std::function<void(const Struct*)> visit = 
+        [&](const Struct* st) {
+        if (visited.count(st->name)) return;
+        if (visiting.count(st->name)) {
+            // Circular dependency - just proceed
+            return;
+        }
+        
+        visiting.insert(st->name);
+        
+        // Visit dependencies first
+        std::set<std::string> deps;
+        collect_struct_dependencies(*st, deps);
+        
+        for (const auto& dep : deps) {
+            // Find the struct with this name
+            for (const auto& other : schema_.structs) {
+                if (other->name == dep) {
+                    visit(other.get());
+                    break;
+                }
+            }
+        }
+        
+        visiting.erase(st->name);
+        visited.insert(st->name);
+        result.push_back(st);
+    };
+    
+    // Visit all structs
+    for (const auto& st : schema_.structs) {
+        visit(st.get());
+    }
+    
+    return result;
+}
+
+void CodeGenerator::collect_struct_dependencies(const Struct& st, std::set<std::string>& deps) const {
+    for (const auto& field : st.fields) {
+        if (field->type.is_named()) {
+            auto type_name = std::get<std::string>(field->type.kind);
+            // Check if this is a struct (not an enum)
+            for (const auto& other : schema_.structs) {
+                if (other->name == type_name) {
+                    deps.insert(type_name);
+                    break;
+                }
+            }
+        } else if (field->type.is_list()) {
+            auto element_type = std::get<std::shared_ptr<Type>>(field->type.kind);
+            if (element_type->is_named()) {
+                auto type_name = std::get<std::string>(element_type->kind);
+                for (const auto& other : schema_.structs) {
+                    if (other->name == type_name) {
+                        deps.insert(type_name);
+                        break;
+                    }
+                }
+            }
+        } else if (field->type.is_map()) {
+            auto [key_type, value_type] = std::get<std::pair<std::shared_ptr<Type>, 
+                                                             std::shared_ptr<Type>>>(field->type.kind);
+            if (value_type->is_named()) {
+                auto type_name = std::get<std::string>(value_type->kind);
+                for (const auto& other : schema_.structs) {
+                    if (other->name == type_name) {
+                        deps.insert(type_name);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 } // namespace psyc

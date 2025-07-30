@@ -3,8 +3,13 @@
  * @brief Implementation of ChaCha20-Poly1305 AEAD
  */
 
-#include <psyfer/crypto/chacha20.hpp>
+#include <psyfer.hpp>
 #include <cstring>
+
+#ifdef HAVE_OPENSSL
+#include <openssl/evp.h>
+#include <memory>
+#endif
 
 namespace psyfer::crypto {
 
@@ -385,6 +390,95 @@ void chacha20_poly1305::pad16(poly1305& poly, size_t len) noexcept {
     }
 }
 
+#ifdef HAVE_OPENSSL
+struct EVPCipherCtxDeleter {
+    void operator()(EVP_CIPHER_CTX* ctx) const {
+        if (ctx) EVP_CIPHER_CTX_free(ctx);
+    }
+};
+
+using EVPCipherCtxPtr = std::unique_ptr<EVP_CIPHER_CTX, EVPCipherCtxDeleter>;
+
+std::error_code chacha20_poly1305::encrypt(
+    std::span<std::byte> data,
+    std::span<const std::byte> key,
+    std::span<const std::byte> nonce,
+    std::span<std::byte> tag,
+    std::span<const std::byte> aad
+) noexcept {
+    // Validate parameters
+    if (key.size() != KEY_SIZE) {
+        return make_error_code(error_code::invalid_key_size);
+    }
+    if (nonce.size() != NONCE_SIZE) {
+        return make_error_code(error_code::invalid_nonce_size);
+    }
+    if (tag.size() != TAG_SIZE) {
+        return make_error_code(error_code::invalid_tag_size);
+    }
+
+    // Create cipher context
+    EVPCipherCtxPtr ctx(EVP_CIPHER_CTX_new());
+    if (!ctx) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    // Initialize encryption with ChaCha20-Poly1305
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_chacha20_poly1305(), nullptr, nullptr, nullptr) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    // Set IV length (nonce for ChaCha20-Poly1305)
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_SET_IVLEN,
+                           static_cast<int>(nonce.size()), nullptr) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    // Initialize key and IV
+    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr,
+                          reinterpret_cast<const unsigned char*>(key.data()),
+                          reinterpret_cast<const unsigned char*>(nonce.data())) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    // Process AAD
+    if (!aad.empty()) {
+        int outlen;
+        if (EVP_EncryptUpdate(ctx.get(), nullptr, &outlen,
+                             reinterpret_cast<const unsigned char*>(aad.data()),
+                             static_cast<int>(aad.size())) != 1) {
+            return make_error_code(error_code::encryption_failed);
+        }
+    }
+
+    // Encrypt data in-place
+    int outlen;
+    int total_len = 0;
+    if (EVP_EncryptUpdate(ctx.get(),
+                         reinterpret_cast<unsigned char*>(data.data()), &outlen,
+                         reinterpret_cast<const unsigned char*>(data.data()),
+                         static_cast<int>(data.size())) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+    total_len += outlen;
+
+    // Finalize encryption
+    if (EVP_EncryptFinal_ex(ctx.get(),
+                           reinterpret_cast<unsigned char*>(data.data()) + total_len,
+                           &outlen) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    // Get tag
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_GET_TAG, 16,
+                           reinterpret_cast<unsigned char*>(tag.data())) != 1) {
+        return make_error_code(error_code::encryption_failed);
+    }
+
+    return {};
+}
+#else
+// Original implementation with Poly1305 padding issue
 std::error_code chacha20_poly1305::encrypt(
     std::span<std::byte> data,
     std::span<const std::byte> key,
@@ -420,6 +514,32 @@ std::error_code chacha20_poly1305::encrypt(
     );
     
     // Compute authentication tag
+    /* TODO: Fix Poly1305 authentication
+     * 
+     * PROBLEM DESCRIPTION:
+     * Similar to the AES-GCM GHASH issue, our Poly1305 authentication is producing
+     * incorrect tags compared to the RFC 8439 test vectors.
+     * 
+     * CURRENT BEHAVIOR:
+     * - The ChaCha20 encryption itself is correct (ciphertext matches)
+     * - The Poly1305 authentication tag is wrong
+     * - Expected: 1ae10b594f09e26a7e902ecbd0600691
+     * - Got:      2dfcb1284cbb08be8b8e41325015526e
+     *
+     * LIKELY ISSUES:
+     * 1. The padding between AAD and ciphertext might be incorrect
+     * 2. The Poly1305 implementation might have endianness issues
+     * 3. The way we're feeding data to Poly1305 might not match RFC 8439
+     *
+     * RFC 8439 CONSTRUCTION:
+     * 1. Pad AAD to 16-byte boundary
+     * 2. Process ciphertext
+     * 3. Pad ciphertext to 16-byte boundary
+     * 4. Append 8-byte little-endian AAD length
+     * 5. Append 8-byte little-endian ciphertext length
+     *
+     * Our pad16() function seems correct, but the overall construction might be wrong.
+     */
     poly1305 poly;
     poly.init(poly_key);
     
@@ -446,7 +566,91 @@ std::error_code chacha20_poly1305::encrypt(
     
     return {};
 }
+#endif // HAVE_OPENSSL
 
+#ifdef HAVE_OPENSSL
+std::error_code chacha20_poly1305::decrypt(
+    std::span<std::byte> data,
+    std::span<const std::byte> key,
+    std::span<const std::byte> nonce,
+    std::span<const std::byte> tag,
+    std::span<const std::byte> aad
+) noexcept {
+    // Validate parameters
+    if (key.size() != KEY_SIZE) {
+        return make_error_code(error_code::invalid_key_size);
+    }
+    if (nonce.size() != NONCE_SIZE) {
+        return make_error_code(error_code::invalid_nonce_size);
+    }
+    if (tag.size() != TAG_SIZE) {
+        return make_error_code(error_code::invalid_tag_size);
+    }
+
+    // Create cipher context
+    EVPCipherCtxPtr ctx(EVP_CIPHER_CTX_new());
+    if (!ctx) {
+        return make_error_code(error_code::decryption_failed);
+    }
+
+    // Initialize decryption with ChaCha20-Poly1305
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_chacha20_poly1305(), nullptr, nullptr, nullptr) != 1) {
+        return make_error_code(error_code::decryption_failed);
+    }
+
+    // Set IV length
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_SET_IVLEN,
+                           static_cast<int>(nonce.size()), nullptr) != 1) {
+        return make_error_code(error_code::decryption_failed);
+    }
+
+    // Initialize key and IV
+    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr,
+                          reinterpret_cast<const unsigned char*>(key.data()),
+                          reinterpret_cast<const unsigned char*>(nonce.data())) != 1) {
+        return make_error_code(error_code::decryption_failed);
+    }
+
+    // Process AAD
+    if (!aad.empty()) {
+        int outlen;
+        if (EVP_DecryptUpdate(ctx.get(), nullptr, &outlen,
+                             reinterpret_cast<const unsigned char*>(aad.data()),
+                             static_cast<int>(aad.size())) != 1) {
+            return make_error_code(error_code::decryption_failed);
+        }
+    }
+
+    // Decrypt data in-place
+    int outlen;
+    int total_len = 0;
+    if (EVP_DecryptUpdate(ctx.get(),
+                         reinterpret_cast<unsigned char*>(data.data()), &outlen,
+                         reinterpret_cast<const unsigned char*>(data.data()),
+                         static_cast<int>(data.size())) != 1) {
+        return make_error_code(error_code::decryption_failed);
+    }
+    total_len += outlen;
+
+    // Set expected tag
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_SET_TAG, 16,
+                           const_cast<unsigned char*>(
+                               reinterpret_cast<const unsigned char*>(tag.data()))) != 1) {
+        return make_error_code(error_code::decryption_failed);
+    }
+
+    // Finalize decryption and verify tag
+    if (EVP_DecryptFinal_ex(ctx.get(),
+                           reinterpret_cast<unsigned char*>(data.data()) + total_len,
+                           &outlen) != 1) {
+        // Authentication failed
+        return make_error_code(error_code::authentication_failed);
+    }
+
+    return {};
+}
+#else
+// Original implementation with Poly1305 padding issue  
 std::error_code chacha20_poly1305::decrypt(
     std::span<std::byte> data,
     std::span<const std::byte> key,
@@ -520,6 +724,7 @@ std::error_code chacha20_poly1305::decrypt(
     
     return {};
 }
+#endif // HAVE_OPENSSL
 
 std::error_code chacha20_poly1305::encrypt_oneshot(
     std::span<std::byte> data,

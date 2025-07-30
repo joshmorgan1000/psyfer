@@ -3,8 +3,7 @@
  * @brief X25519 key exchange implementation
  */
 
-#include <psyfer/crypto/x25519.hpp>
-#include <psyfer/utils/secure.hpp>
+#include <psyfer.hpp>
 #include <cstring>
 #include <functional>
 

@@ -114,7 +114,18 @@ std::unique_ptr<Struct> Parser::parse_struct() {
     
     // Parse fields
     while (!check(TokenType::RBRACE) && !check(TokenType::END_OF_FILE)) {
-        st->fields.push_back(parse_field());
+        // Check for field annotations
+        std::vector<std::unique_ptr<Annotation>> field_annotations;
+        if (check(TokenType::AT)) {
+            field_annotations = parse_annotations();
+        }
+        
+        auto field = parse_field();
+        // Merge annotations
+        for (auto& ann : field_annotations) {
+            field->annotations.push_back(std::move(ann));
+        }
+        st->fields.push_back(std::move(field));
     }
     
     consume(TokenType::RBRACE, "Expected '}' after struct fields");
@@ -310,7 +321,16 @@ std::unique_ptr<Annotation> Parser::parse_annotation() {
         do {
             Token key = consume(TokenType::IDENTIFIER, "Expected parameter name");
             consume(TokenType::EQUALS, "Expected '=' after parameter name");
-            Token value = consume(TokenType::STRING, "Expected string value for parameter");
+            
+            // Accept either string or identifier for parameter value
+            Token value;
+            if (check(TokenType::STRING)) {
+                value = advance();
+            } else if (check(TokenType::IDENTIFIER) || current().is_primitive_type()) {
+                value = advance();
+            } else {
+                error("Expected string or identifier value for parameter");
+            }
             ann->parameters[key.value] = value.value;
         } while (match(TokenType::COMMA));
         

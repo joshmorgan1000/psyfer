@@ -3,7 +3,7 @@
  * @brief AES-128 implementation using AES-NI instructions
  */
 
-#include <psyfer/crypto/aes128.hpp>
+#include <psyfer.hpp>
 
 #if defined(__AES__) && (defined(__x86_64__) || defined(__i386__))
 

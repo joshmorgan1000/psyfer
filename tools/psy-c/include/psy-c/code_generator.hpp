@@ -20,6 +20,7 @@ struct GeneratorOptions {
     bool generate_comments = true;   // Generate doxygen comments
     bool use_exceptions = false;     // Use exceptions vs error codes
     std::string header_guard_prefix = "PSYC_GENERATED";
+    std::string output_header_file;  // Output header filename for implementation
 };
 
 /**
@@ -82,6 +83,10 @@ private:
     void dedent();
     void emit_comment(const std::string& text);
     [[nodiscard]] std::string sanitize_identifier(const std::string& id) const;
+    
+    // Dependency ordering
+    [[nodiscard]] std::vector<const Struct*> topological_sort_structs() const;
+    void collect_struct_dependencies(const Struct& st, std::set<std::string>& deps) const;
     
     const Schema& schema_;
     GeneratorOptions options_;
