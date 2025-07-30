@@ -23,12 +23,6 @@
 namespace psyfer::crypto {
 
 // Forward declarations for hardware acceleration
-#ifdef __APPLE__
-extern bool aes_commoncrypto_available() noexcept;
-extern void aes256_key_expansion_cc(const uint8_t* key, uint8_t* round_keys);
-extern void aes256_encrypt_block_cc(const uint8_t* key, uint8_t* block);
-extern void aes256_decrypt_block_cc(const uint8_t* key, uint8_t* block);
-#endif
 
 #ifdef __AES__
 extern void aes256_key_expansion_ni(const uint8_t* key, __m128i* round_keys);
@@ -52,10 +46,7 @@ bool aes256::hardware_available() noexcept {
 
 // Check for AES-NI support
 bool aes_ni_available() noexcept {
-    #ifdef __APPLE__
-    // Use CommonCrypto on Apple platforms
-    return aes_commoncrypto_available();
-    #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRYPTO)
+    #if defined(__aarch64__) && defined(__ARM_FEATURE_CRYPTO)
     // ARM64 crypto extensions - if compiled with support, assume available
     // Runtime detection would require reading system registers which may be privileged
     return true;
@@ -193,15 +184,7 @@ void aes256::key_expansion(std::span<const std::byte, KEY_SIZE> key) noexcept {
 }
 
 void aes256::encrypt_block(std::span<std::byte, BLOCK_SIZE> block) noexcept {
-    #ifdef __APPLE__
-    if (use_hw_acceleration) {
-        // CommonCrypto needs the original key, not expanded round keys
-        // Store first 32 bytes as the original key
-        aes256_encrypt_block_cc(reinterpret_cast<const uint8_t*>(round_keys.data()),
-                               reinterpret_cast<uint8_t*>(block.data()));
-        return;
-    }
-    #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRYPTO)
+    #if defined(__aarch64__) && defined(__ARM_FEATURE_CRYPTO)
     if (use_hw_acceleration) {
         aes256_encrypt_block_arm64(reinterpret_cast<const uint8x16_t*>(round_keys.data()),
                                   reinterpret_cast<uint8_t*>(block.data()));

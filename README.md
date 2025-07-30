@@ -3,18 +3,10 @@
 <div align="center">
   <img src="psyfer_logo.png" alt="Psyne Logo" width="150"/>
 
-A modern, blazing-fast, and easy-to-use serialization/deserialization library with built-in encryption and compression features. Psyfer revolutionizes secure data handling in C++23 with its unique psy-c code generator that creates type-safe, encrypted serialization code from simple schema definitions.
+A modern, blazing-fast, and easy-to-use encryption library with built-in compression features. Psyfer provides a comprehensive cryptographic suite for C++23 applications with zero-copy operations and hardware acceleration.
 </div>
 
 ## Features
-
-### 🚀 psy-c: Revolutionary Code Generation
-- **Schema-driven development** - Define your data structures in `.psy` files
-- **Automatic serialization** - Generated code handles all encoding/decoding
-- **Field-level encryption** - Annotate fields with `@encrypt` for automatic encryption
-- **Compression annotations** - Use `@compress` for transparent compression
-- **Type safety** - Strongly typed generated code prevents runtime errors
-- **Zero boilerplate** - Focus on your data, not serialization logic
 
 ### 🔐 Comprehensive Cryptographic Suite
 - **Symmetric encryption**: AES-256-GCM, ChaCha20-Poly1305
@@ -33,49 +25,30 @@ A modern, blazing-fast, and easy-to-use serialization/deserialization library wi
 
 ## Quick Start
 
-### Define Your Schema (user.psy)
-
-```protobuf
-struct UserProfile {
-    string username;
-    @encrypt(aes256_gcm) string email;
-    @encrypt(aes256_gcm) uint32 age;
-    vector<string> interests;
-}
-
-@encrypt(chacha20_poly1305)
-struct SecureMessage {
-    uint64 timestamp;
-    string sender;
-    @compress(lz4) string content;
-    bytes attachment;
-}
-```
-
-### Use Generated Code
+### Basic Encryption Example
 
 ```cpp
 #include <psyfer.hpp>
-#include "user.psy.h"  // Generated from schema
 
 using namespace psyfer;
 
-// Create a context for key management
-auto ctx = PsyferContext::create({.identity_name = "MyApp"}).value();
+// Create a secure key
+auto key = crypto::secure_key::generate();
 
-// Create and populate data
-UserProfile user;
-user.username = "alice";
-user.email = "alice@example.com";  // Will be encrypted
-user.age = 28;                     // Will be encrypted
-user.interests = {"crypto", "c++"};
+// Initialize AES-256-GCM cipher
+crypto::aes256 cipher(key.span());
 
-// Serialize with automatic field encryption
-auto encrypted_data = user.serialize(ctx->get_psy_key());
+// Encrypt data
+std::vector<std::byte> plaintext = /* your data */;
+std::array<std::byte, 12> nonce{};
+std::array<std::byte, 16> tag{};
+utils::secure_random::generate(nonce);
 
-// Deserialize with automatic decryption
-UserProfile restored;
-restored.deserialize(encrypted_data, ctx->get_psy_key());
+crypto::aes256_gcm gcm(cipher);
+gcm.encrypt(plaintext, nonce, tag);
+
+// Decrypt data
+gcm.decrypt(plaintext, nonce, tag);
 ```
 
 ## Installation
@@ -327,7 +300,3 @@ Psyfer uses the following libraries:
 - OpenSSL for Ed25519 operations
 - Hardware intrinsics from Intel and ARM for acceleration
 
-Special thanks to the cryptographic community for their research and reference implementations,
-as well as Google's Protocol Buffers, and of course Capn Proto for inspiration.
-
-*Developed with the aide of carefully supervised AI assistance, ensuring high-quality code generation and adherence to best practices.*

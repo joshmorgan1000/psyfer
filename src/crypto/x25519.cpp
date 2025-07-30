@@ -7,19 +7,17 @@
 #include <cstring>
 #include <functional>
 
-#ifdef HAVE_CRYPTOKIT
-extern "C" {
-#include "x25519_cryptokit.h"
-}
+#ifdef HAVE_OPENSSL
+#include <openssl/evp.h>
+#include <openssl/x509.h>
 #endif
 
 namespace psyfer::crypto {
 
-#ifdef HAVE_CRYPTOKIT
-// Check if CryptoKit is available at runtime
-static bool use_cryptokit = x25519_cryptokit_available();
+#ifdef HAVE_OPENSSL
+static constexpr bool use_openssl = true;
 #else
-static constexpr bool use_cryptokit = false;
+static constexpr bool use_openssl = false;
 #endif
 
 // Field arithmetic constants
@@ -28,13 +26,12 @@ static constexpr uint64_t MASK_51 = (1ULL << 51) - 1;
 std::error_code x25519::generate_private_key(
     std::span<std::byte, PRIVATE_KEY_SIZE> private_key
 ) noexcept {
-#ifdef HAVE_CRYPTOKIT
-    if (use_cryptokit) {
-        if (x25519_cryptokit_generate_private_key(
-                reinterpret_cast<uint8_t*>(private_key.data())) == 0) {
-            return {};
-        }
-        // Fall through to software implementation on error
+#ifdef HAVE_OPENSSL
+    if (use_openssl) {
+        // Use OpenSSL implementation from x25519_openssl.cpp
+        extern std::error_code x25519_openssl_generate_private_key(
+            std::span<std::byte, PRIVATE_KEY_SIZE> private_key);
+        return x25519_openssl_generate_private_key(private_key);
     }
 #endif
     
@@ -56,14 +53,13 @@ std::error_code x25519::derive_public_key(
     std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
     std::span<std::byte, PUBLIC_KEY_SIZE> public_key
 ) noexcept {
-#ifdef HAVE_CRYPTOKIT
-    if (use_cryptokit) {
-        if (x25519_cryptokit_derive_public_key(
-                reinterpret_cast<const uint8_t*>(private_key.data()),
-                reinterpret_cast<uint8_t*>(public_key.data())) == 0) {
-            return {};
-        }
-        // Fall through to software implementation on error
+#ifdef HAVE_OPENSSL
+    if (use_openssl) {
+        // Use OpenSSL implementation from x25519_openssl.cpp
+        extern std::error_code x25519_openssl_derive_public_key(
+            std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
+            std::span<std::byte, PUBLIC_KEY_SIZE> public_key);
+        return x25519_openssl_derive_public_key(private_key, public_key);
     }
 #endif
     
@@ -81,15 +77,14 @@ std::error_code x25519::compute_shared_secret(
     std::span<const std::byte, PUBLIC_KEY_SIZE> peer_public_key,
     std::span<std::byte, SHARED_SECRET_SIZE> shared_secret
 ) noexcept {
-#ifdef HAVE_CRYPTOKIT
-    if (use_cryptokit) {
-        if (x25519_cryptokit_compute_shared_secret(
-                reinterpret_cast<const uint8_t*>(private_key.data()),
-                reinterpret_cast<const uint8_t*>(peer_public_key.data()),
-                reinterpret_cast<uint8_t*>(shared_secret.data())) == 0) {
-            return {};
-        }
-        // Fall through to software implementation on error
+#ifdef HAVE_OPENSSL
+    if (use_openssl) {
+        // Use OpenSSL implementation from x25519_openssl.cpp
+        extern std::error_code x25519_openssl_compute_shared_secret(
+            std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
+            std::span<const std::byte, PUBLIC_KEY_SIZE> peer_public_key,
+            std::span<std::byte, SHARED_SECRET_SIZE> shared_secret);
+        return x25519_openssl_compute_shared_secret(private_key, peer_public_key, shared_secret);
     }
 #endif
     
