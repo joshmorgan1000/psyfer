@@ -12,6 +12,23 @@ namespace psyfer::crypto {
 
 namespace {
     /**
+     * @brief Convert float to uin32_t bits
+     * @return uint32_t representation of the float
+     */
+    [[nodiscard]] inline uint32_t float_to_bits(float value) noexcept {
+        return std::bit_cast<uint32_t>(value);
+    }
+
+    /**
+     * @brief Convert uint32_t bits to float
+     * @return float representation of the bits
+     */
+    [[nodiscard]] inline float bits_to_float(uint32_t bits) noexcept {
+        return std::bit_cast<float>(bits);
+    }
+
+
+    /**
      * @brief Convert double to uint64_t bits
      */
     [[nodiscard]] inline uint64_t double_to_bits(double value) noexcept {
@@ -98,6 +115,24 @@ namespace {
         
         return result;
     }
+
+    /**
+     * @brief Count *trailing* zero bytes (little‑endian) – faster with ctz
+     */
+    [[nodiscard]] uint8_t count_leading_zero_bytes(uint64_t value) noexcept {
+        if (value == 0) return 8;
+
+    #if defined(__GNUC__) || defined(__clang__)          // maps to TZCNT/LZCNT
+        return static_cast<uint8_t>(__builtin_ctzll(value) / 8);
+    #else
+        uint8_t count = 0;
+        while ((value & 0xFFULL) == 0 && count < 8) {
+            value >>= 8;
+            ++count;
+        }
+        return count;
+    #endif
+    }
 }
 
 // FPC Writer implementation
@@ -159,50 +194,54 @@ void fpc_writer::encode_value(uint64_t value) noexcept {
     uint64_t dfcm_delta2 = dfcm_->predict() ^ v2;
     dfcm_->update(v2);
     
-    // Choose best predictor for each value
+    // Choose best predictor for each value based on encoded length first
+    uint8_t len_fcm1  = 8 - count_leading_zero_bytes(fcm_delta1);
+    uint8_t len_dfcm1 = 8 - count_leading_zero_bytes(dfcm_delta1);
+
     uint64_t delta1;
     predictor_type type1;
-    if (fcm_delta1 <= dfcm_delta1) {
+    uint8_t len1;
+    if (len_fcm1 < len_dfcm1 ||
+        (len_fcm1 == len_dfcm1 && fcm_delta1 <= dfcm_delta1)) {
         delta1 = fcm_delta1;
-        type1 = predictor_type::FCM;
+        type1  = predictor_type::FCM;
+        len1   = len_fcm1;
     } else {
         delta1 = dfcm_delta1;
-        type1 = predictor_type::DFCM;
+        type1  = predictor_type::DFCM;
+        len1   = len_dfcm1;
     }
-    
+
+    uint8_t len_fcm2  = 8 - count_leading_zero_bytes(fcm_delta2);
+    uint8_t len_dfcm2 = 8 - count_leading_zero_bytes(dfcm_delta2);
+
     uint64_t delta2;
     predictor_type type2;
-    if (fcm_delta2 <= dfcm_delta2) {
+    uint8_t len2;
+    if (len_fcm2 < len_dfcm2 ||
+        (len_fcm2 == len_dfcm2 && fcm_delta2 <= dfcm_delta2)) {
         delta2 = fcm_delta2;
-        type2 = predictor_type::FCM;
+        type2  = predictor_type::FCM;
+        len2   = len_fcm2;
     } else {
         delta2 = dfcm_delta2;
-        type2 = predictor_type::DFCM;
+        type2  = predictor_type::DFCM;
+        len2   = len_dfcm2;
     }
     
-    // Count non-zero bytes
-    uint8_t len1 = 8 - count_leading_zero_bytes(delta1);
-    uint8_t len2 = 8 - count_leading_zero_bytes(delta2);
-    
-    // Handle special case: length 4 is encoded as 5
-    if (len1 == 4) len1 = 5;
-    if (len2 == 4) len2 = 5;
-    
-    // Create header
-    pair_header header;
-    header.h1_len = (len1 >= 5) ? len1 - 1 : len1;
-    header.h1_type = type1;
-    header.h2_len = (len2 >= 5) ? len2 - 1 : len2;
-    header.h2_type = type2;
-    
-    headers_.push_back(header.encode());
-    
-    // Encode values
     size_t old_size = values_.size();
     values_.resize(old_size + len1 + len2);
-    
+
     encode_nonzero_bytes(delta1, len1, values_.data() + old_size);
     encode_nonzero_bytes(delta2, len2, values_.data() + old_size + len1);
+    
+    pair_header header;
+    header.h1_len  = (len1 >= 5) ? len1 - 1 : len1;
+    header.h1_type = type1;
+    header.h2_len  = (len2 >= 5) ? len2 - 1 : len2;
+    header.h2_type = type2;
+
+    headers_.push_back(header.encode());
     
     record_count_++;  // We already incremented once for the first value, so total is 2
     
@@ -217,9 +256,7 @@ void fpc_writer::flush() noexcept {
         // Handle unpaired value
         if (record_count_ % 2 == 1) {
             encode_value(0);  // Pair with zero
-            // Remove the dummy value's data
-            pair_header last_header = pair_header::decode(headers_.back());
-            values_.resize(values_.size() - last_header.h2_len);
+            // Removed the two lines that discarded the dummy pair to keep consistency
         }
         flush_block();
     }
