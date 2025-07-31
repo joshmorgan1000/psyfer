@@ -7,9 +7,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Add goldenhash submodule
 add_subdirectory(goldenhash)
 
-# Add inkpacket submodule
-add_subdirectory(inkpacket)
-
 add_library(psyfer
     STATIC
     src/logger/logger.cpp
