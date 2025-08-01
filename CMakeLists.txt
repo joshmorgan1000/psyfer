@@ -4,42 +4,33 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(OpenSSL REQUIRED)
+if(NOT OPENSSL_FOUND)
+    message(FATAL_ERROR "OpenSSL not found. Please install OpenSSL development files.")
+endif()
+message(STATUS "Found OpenSSL: ${OPENSSL_VERSION} (${OPENSSL_INCLUDE_DIR})")
+
 # Add goldenhash submodule
 add_subdirectory(goldenhash)
 
 add_library(psyfer
     STATIC
     src/logger/logger.cpp
-    src/psyfer.cpp
-    src/psyfer_context.cpp
-    src/hash/sha.cpp
-    src/hash/xxhash3.cpp
-    src/mac/aes_cmac.cpp
-    src/kdf/hkdf.cpp
-    src/crypto/aes128.cpp
-    src/crypto/aes256.cpp
-    src/crypto/ghash_portable.cpp
-    src/crypto/chacha20.cpp
-    src/crypto/ed25519.cpp
-    src/crypto/ed25519_ops.cpp
-    src/crypto/ed25519_openssl.cpp
-    src/crypto/x25519.cpp
-    src/crypto/x25519_openssl.cpp
     src/compression/lz4.cpp
-    src/compression/fpc.cpp
-    src/utils/secure.cpp
-    src/utils/secure_key.cpp
+    src/compression/compression_statics.cpp
 )
 
 target_include_directories(psyfer PUBLIC
+    ${OPENSSL_INCLUDE_DIR}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 target_include_directories(psyfer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Find and link OpenSSL
-find_package(OpenSSL REQUIRED)
-target_link_libraries(psyfer PUBLIC OpenSSL::Crypto)
-target_compile_definitions(psyfer PRIVATE HAVE_OPENSSL=1)
+target_link_libraries(psyfer PUBLIC
+    OpenSSL::Crypto
+    OpenSSL::SSL
+)
 
 # Link goldenhash
 target_link_libraries(psyfer PUBLIC goldenhash)

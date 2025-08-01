@@ -21,13 +21,16 @@ function(add_psyfer_test test_name)
 endfunction()
 
 # Add all unit tests - simple functional verification only
-add_psyfer_test(test_aes_comprehensive)
-add_psyfer_test(test_chacha20_comprehensive)
-add_psyfer_test(test_cmac_comprehensive)
-add_psyfer_test(test_crypto_vectors)
-add_psyfer_test(test_ed25519_comprehensive)
-add_psyfer_test(test_hmac_comprehensive)
-add_psyfer_test(test_sha_comprehensive)
-add_psyfer_test(test_x25519_comprehensive)
-add_psyfer_test(test_xxhash3_comprehensive)
-add_psyfer_test(test_openssl_crypto)
+add_psyfer_test(test_basic_encryption)
+add_psyfer_test(test_compression)
+add_psyfer_test(test_secure_memory)
+
+# Add goldenhash test
+add_executable(test_goldenhash test_goldenhash.cpp)
+target_link_libraries(test_goldenhash PRIVATE goldenhash)
+target_compile_features(test_goldenhash PRIVATE cxx_std_23)
+
+# Add LZ4 debug test
+add_executable(test_lz4_debug test_lz4_debug.cpp)
+target_link_libraries(test_lz4_debug PRIVATE psyfer)
+target_compile_features(test_lz4_debug PRIVATE cxx_std_23)

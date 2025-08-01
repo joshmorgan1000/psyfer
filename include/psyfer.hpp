@@ -29,10 +29,85 @@
 #include <unistd.h>
 #endif
 #include <goldenhash.hpp>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <openssl/err.h>
+#include <openssl/crypto.h>
+#include <openssl/sha.h>
+#include <openssl/hmac.h>
 namespace psyfer {
 constexpr uint32_t VERSION_MAJOR = 1;
 constexpr uint32_t VERSION_MINOR = 0;
 constexpr uint32_t VERSION_PATCH = 0;
+
+// Error codes for psyfer operations
+enum class error_code {
+    success = 0,
+    invalid_buffer_size,
+    buffer_too_small,
+    decompression_failed,
+    encryption_failed,
+    decryption_failed,
+    invalid_key_size,
+    invalid_parameter,
+    invalid_nonce_size,
+    invalid_tag_size,
+    hash_mismatch,
+    compression_failed,
+    memory_allocation_failed,
+    not_implemented,
+    crypto_error,
+    unknown_error,
+    invalid_argument,
+    authentication_failed
+};
+inline static std::string message(int ev) {
+    switch (static_cast<error_code>(ev)) {
+        case error_code::success:
+            return "Success";
+        case error_code::invalid_argument:
+            return "Invalid argument";
+        case error_code::invalid_key_size:
+            return "Invalid key size";
+        case error_code::invalid_nonce_size:
+            return "Invalid nonce size";
+        case error_code::invalid_tag_size:
+            return "Invalid tag size";
+        case error_code::invalid_buffer_size:
+            return "Invalid buffer size";
+        case error_code::encryption_failed:
+            return "Encryption failed";
+        case error_code::decryption_failed:
+            return "Decryption failed";
+        case error_code::authentication_failed:
+            return "Authentication failed";
+        case error_code::compression_failed:
+            return "Compression failed";
+        case error_code::decompression_failed:
+            return "Decompression failed";
+        case error_code::hash_mismatch:
+            return "Hash mismatch";
+        case error_code::memory_allocation_failed:
+            return "Memory allocation failed";
+        case error_code::not_implemented:
+            return "Not implemented";
+        case error_code::crypto_error:
+            return "Cryptographic operation failed";
+        case error_code::buffer_too_small:
+            return "Buffer too small";
+        case error_code::unknown_error:
+            return "Unknown error";
+        default:
+            return "Unknown error code";
+    }
+}
+inline std::error_code make_error_code(error_code e) noexcept {
+    return std::error_code(static_cast<int>(e), std::generic_category());
+}
+// Result type alias
+template<typename T>
+using result = std::expected<T, std::error_code>;
+
 }
 template<typename T>
 concept HasEncryptedSize = requires(const T& t) {
@@ -199,830 +274,678 @@ current = getGlobalContext().currently_serving.load(); } }
 inline void stdout_unlock() { getGlobalContext().currently_serving.fetch_add(1);
 getGlobalContext().currently_serving.notify_all(); }
 namespace psyfer {
-// Configuration functions
-inline std::atomic<bool> use_software_only_for_encryption{false};
-inline void enable_software_only() noexcept {
-    use_software_only_for_encryption.store(true);
-}
-inline void disable_software_only() noexcept {
-    use_software_only_for_encryption.store(false);
-}
-[[nodiscard]] inline bool is_software_only() noexcept {
-    return use_software_only_for_encryption.load();
-}
-enum class error_code : int32_t {
-    success = 0,
-    invalid_argument,
-    invalid_key_size,
-    invalid_nonce_size,
-    invalid_tag_size,
-    invalid_buffer_size,
-    encryption_failed,
-    decryption_failed,
-    authentication_failed,
-    compression_failed,
-    decompression_failed,
-    hash_mismatch,
-    memory_allocation_failed,
-    not_implemented,
-    crypto_error,
-    buffer_too_small,
-    unknown_error
-};
-class error_category_impl final : public std::error_category {
-public:
-    [[nodiscard]] const char* name() const noexcept override { return "psyfer"; }
-    [[nodiscard]] std::string message(int ev) const override;
-};
-[[nodiscard]] const std::error_category& get_error_category() noexcept;
-[[nodiscard]] inline std::error_code make_error_code(error_code e) noexcept {
-    return {static_cast<int>(e), get_error_category()};
-}
-template<typename T>
-using result = std::expected<T, std::error_code>;
-// Key size constants
-constexpr size_t AES256_KEY_SIZE = 32;
-constexpr size_t CHACHA20_KEY_SIZE = 32;
-constexpr size_t X25519_PRIVATE_KEY_SIZE = 32;
-constexpr size_t X25519_PUBLIC_KEY_SIZE = 32;
-constexpr size_t BLAKE3_KEY_SIZE = 32;
-// Nonce size constants
-constexpr size_t AES256_GCM_NONCE_SIZE = 12;
-constexpr size_t CHACHA20_POLY1305_NONCE_SIZE = 12;
-// Tag size constants  
-constexpr size_t AES256_GCM_TAG_SIZE = 16;
-constexpr size_t CHACHA20_POLY1305_TAG_SIZE = 16;
-template<typename T>
-concept byte_container = requires(T t) {
-    { t.data() } -> std::convertible_to<const std::byte*>;
-    { t.size() } -> std::convertible_to<std::size_t>;
-};
-template<typename T>
-concept mutable_byte_container = byte_container<T> && requires(T t) {
-    { t.data() } -> std::convertible_to<std::byte*>;
-};
-class hash_algorithm {
-public:
-    virtual ~hash_algorithm() = default;
-    [[nodiscard]] virtual size_t output_size() const noexcept = 0;
-    virtual void update(std::span<const std::byte> data) noexcept = 0;
-    virtual void finalize(std::span<std::byte> output) noexcept = 0;
-    virtual void reset() noexcept = 0;
-};
-class encryption_algorithm {
-public:
-    virtual ~encryption_algorithm() = default;
-    [[nodiscard]] virtual size_t key_size() const noexcept = 0;
-    [[nodiscard]] virtual size_t nonce_size() const noexcept = 0;
-    [[nodiscard]] virtual size_t tag_size() const noexcept = 0;
-    [[nodiscard]] virtual std::error_code encrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept = 0;
-    [[nodiscard]] virtual std::error_code decrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<const std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept = 0;
-};
-class compression_algorithm {
-public:
-    virtual ~compression_algorithm() = default;
-    [[nodiscard]] virtual size_t max_compressed_size(size_t uncompressed_size) const noexcept = 0;
-    [[nodiscard]] virtual result<size_t> compress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept = 0;
-    [[nodiscard]] virtual result<size_t> decompress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept = 0;
-};
-}
-template<>
-struct std::is_error_code_enum<psyfer::error_code> : std::true_type {};
-namespace psyfer {
-class sha256_hasher final : public hash_algorithm {
-public:
-    sha256_hasher() noexcept;
-    ~sha256_hasher() override;
-    [[nodiscard]] size_t output_size() const noexcept override { return 32; }
-    void update(std::span<const std::byte> data) noexcept override;
-    void finalize(std::span<std::byte> output) noexcept override;
-    void reset() noexcept override;
-    static void hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept;
+using namespace goldenhash;
+class SecureKey {
 private:
-    class impl;
-    std::unique_ptr<impl> pimpl;
-};
-class sha512_hasher final : public hash_algorithm {
-public:
-    sha512_hasher() noexcept;
-    ~sha512_hasher() override;
-    [[nodiscard]] size_t output_size() const noexcept override { return 64; }
-    void update(std::span<const std::byte> data) noexcept override;
-    void finalize(std::span<std::byte> output) noexcept override;
-    void reset() noexcept override;
-    static void hash(std::span<const std::byte> input, std::span<std::byte> output) noexcept;
-private:
-    class impl;
-    std::unique_ptr<impl> pimpl;
-};
-class hmac_sha256_algorithm final : public hash_algorithm {
-public:
-    explicit hmac_sha256_algorithm(std::span<const std::byte> key) noexcept;
-    ~hmac_sha256_algorithm() override;
-    [[nodiscard]] size_t output_size() const noexcept override { return 32; }
-    void update(std::span<const std::byte> data) noexcept override;
-    void finalize(std::span<std::byte> output) noexcept override;
-    void reset() noexcept override;
-    static void hmac(
-        std::span<const std::byte> key,
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept;
-private:
-    class impl;
-    std::unique_ptr<impl> pimpl;
-};
-class hmac_sha512_algorithm final : public hash_algorithm {
-public:
-    explicit hmac_sha512_algorithm(std::span<const std::byte> key) noexcept;
-    ~hmac_sha512_algorithm() override;
-    [[nodiscard]] size_t output_size() const noexcept override { return 64; }
-    void update(std::span<const std::byte> data) noexcept override;
-    void finalize(std::span<std::byte> output) noexcept override;
-    void reset() noexcept override;
-    static void hmac(
-        std::span<const std::byte> key,
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept;
-private:
-    class impl;
-    std::unique_ptr<impl> pimpl;
-};
-class xxhash3_24 {
-public:
-    static constexpr size_t HASH_SIZE = 3; // 24 bits
-    [[nodiscard]] static uint32_t hash( std::span<const std::byte> data,
-        uint64_t seed = 0 ) noexcept;
-    [[nodiscard]] static uint32_t hash(
-        std::string_view str,
-        uint64_t seed = 0
-    ) noexcept {
-        return hash(
-            std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(str.data()),
-                str.size()
-            ),
-            seed
-        );
-    }
-};
-class xxhash3_32 {
-public:
-    static constexpr size_t HASH_SIZE = 4; // 32 bits
-    [[nodiscard]] static uint32_t hash(
-        std::span<const std::byte> data,
-        uint64_t seed = 0
-    ) noexcept;
-    [[nodiscard]] static uint32_t hash(
-        std::string_view str,
-        uint64_t seed = 0
-    ) noexcept {
-        return hash(
-            std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(str.data()),
-                str.size()
-            ),
-            seed
-        );
-    }
-};
-class xxhash3_64 {
-public:
-    static constexpr size_t HASH_SIZE = 8; // 64 bits
-    [[nodiscard]] static uint64_t hash(
-        std::span<const std::byte> data,
-        uint64_t seed = 0
-    ) noexcept;
-    [[nodiscard]] static uint64_t hash(
-        std::string_view str,
-        uint64_t seed = 0
-    ) noexcept {
-        return hash(
-            std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(str.data()),
-                str.size()
-            ),
-            seed
-        );
-    }
-    class hasher {
-    public:
-        explicit hasher(uint64_t seed = 0) noexcept;
-        hasher& update(std::span<const std::byte> data) noexcept;
-        hasher& update(std::string_view str) noexcept {
-            return update(
-                std::span<const std::byte>(
-                    reinterpret_cast<const std::byte*>(str.data()),
-                    str.size()
-                )
-            );
+    uint8_t* private_key = nullptr;
+    uint8_t* public_key = nullptr;
+    size_t key_size_;
+    void secure_alloc() {
+        private_key = (uint8_t*)OPENSSL_secure_malloc(key_size_);
+        if (!private_key) {
+            throw std::runtime_error("Failed to allocate secure memory for private key");
         }
-        [[nodiscard]] uint64_t finalize() noexcept;
-        void reset(uint64_t seed = 0) noexcept;
-    private:
-        static constexpr size_t BUFFER_SIZE = 256;
-        static constexpr size_t ACC_NB = 8;
-        alignas(32) std::array<uint64_t, ACC_NB> acc_;
-        alignas(32) std::array<std::byte, BUFFER_SIZE> buffer_;
-        size_t buffer_size_;
-        size_t total_len_;
-        uint64_t seed_;
+        std::memset(private_key, 0, key_size_); // Initialize to zero
+        public_key = (uint8_t*)OPENSSL_secure_malloc(key_size_);
+        if (!public_key) {
+            OPENSSL_secure_free(private_key);
+            throw std::runtime_error("Failed to allocate secure memory for public key");
+        }
+    }
+    void secure_free() {
+        if (private_key) {
+            OPENSSL_cleanse(private_key, key_size_);
+            OPENSSL_secure_free(private_key);
+            private_key = nullptr;
+        }
+        if (public_key) {
+            OPENSSL_cleanse(public_key, key_size_);
+            OPENSSL_secure_free(public_key);
+            public_key = nullptr;
+        }
+    }
+public:
+    enum class KeyType {
+        AES_128,
+        AES_256,
+        ChaCha20,
+        Poly1305,
+        HMAC_SHA256,
+        HMAC_SHA512,
+        X25519,
+        ED25519
     };
-};
-class xxhash3_128 {
-public:
-    static constexpr size_t HASH_SIZE = 16; // 128 bits
-    struct hash128 {
-        uint64_t low;
-        uint64_t high;
-        bool operator==(const hash128& other) const noexcept {
-            return low == other.low && high == other.high;
+    SecureKey() = default;
+    SecureKey(size_t key_size) : private_key(nullptr), key_size_(key_size) {
+        secure_alloc();
+        // Use openSSL to generate a secure random key
+        if (RAND_bytes(private_key, key_size_) != 1) {
+            secure_free();
+            throw std::runtime_error("Failed to generate secure random key");
         }
-        bool operator!=(const hash128& other) const noexcept {
-            return !(*this == other);
+    }
+    SecureKey(KeyType type, bool generate = true) 
+        : key_size_(type == KeyType::AES_128 ? 16 : (type == KeyType::AES_256 ? 32 : 64)) {
+        if (generate) {
+            secure_alloc();
+            if (RAND_bytes(private_key, key_size_) != 1) {
+                secure_free();
+                throw std::runtime_error("Failed to generate secure random key");
+            }
+        } else {
+            private_key = nullptr; // No allocation
         }
-    };
-    [[nodiscard]] static hash128 hash(
-        std::span<const std::byte> data,
-        uint64_t seed = 0
-    ) noexcept;
-    [[nodiscard]] static hash128 hash(
-        std::string_view str,
-        uint64_t seed = 0
-    ) noexcept {
-        return hash(
-            std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(str.data()),
-                str.size()
-            ),
-            seed
-        );
     }
-    class hasher {
-    public:
-        explicit hasher(uint64_t seed = 0) noexcept;
-        hasher& update(std::span<const std::byte> data) noexcept;
-        hasher& update(std::string_view str) noexcept {
-            return update(
-                std::span<const std::byte>(
-                    reinterpret_cast<const std::byte*>(str.data()),
-                    str.size()
-                )
-            );
+    SecureKey(std::span<const uint8_t> private_key_, std::span<const uint8_t> public_key) {
+        if (private_key_.size() != key_size_ || public_key.size() != key_size_) {
+            throw std::invalid_argument("Key sizes do not match");
         }
-        [[nodiscard]] hash128 finalize() noexcept;
-        void reset(uint64_t seed = 0) noexcept;
-    private:
-        static constexpr size_t BUFFER_SIZE = 256;
-        static constexpr size_t ACC_NB = 8;
-        alignas(32) std::array<uint64_t, ACC_NB> acc_;
-        alignas(32) std::array<std::byte, BUFFER_SIZE> buffer_;
-        size_t buffer_size_;
-        size_t total_len_;
-        uint64_t seed_;
-    };
-};
-using xxh3_24 = xxhash3_24;
-using xxh3_32 = xxhash3_32;
-using xxh3_64 = xxhash3_64;
-using xxh3_128 = xxhash3_128;
-}
-namespace psyfer {
-[[nodiscard]] bool aes_ni_available() noexcept;
-class aes256 {
-public:
-    static constexpr size_t BLOCK_SIZE = 16;  // 128 bits
-    static constexpr size_t KEY_SIZE = 32;    // 256 bits
-    static constexpr size_t ROUNDS = 14;      // AES-256 uses 14 rounds
-    
-    /**
-     * @brief Check if hardware acceleration is available
-     * @return true if AES-NI, ARM crypto, or CommonCrypto is available
-     */
-    static bool hardware_available() noexcept;
-    
-    explicit aes256(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    void encrypt_block(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-    void decrypt_block(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-private:
-    alignas(16) std::array<std::byte, (ROUNDS + 1) * BLOCK_SIZE> round_keys{};
-    bool use_hw_acceleration = false;
-    void key_expansion(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    void encrypt_block_sw(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-    void decrypt_block_sw(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-};
-class aes256_gcm final : public encryption_algorithm {
-public:
-    static constexpr size_t KEY_SIZE = 32;    // 256 bits
-    static constexpr size_t NONCE_SIZE = 12;  // 96 bits (recommended)
-    static constexpr size_t TAG_SIZE = 16;    // 128 bits
-    aes256_gcm() noexcept = default;
-    [[nodiscard]] size_t key_size() const noexcept override { return KEY_SIZE; }
-    [[nodiscard]] size_t nonce_size() const noexcept override { return NONCE_SIZE; }
-    [[nodiscard]] size_t tag_size() const noexcept override { return TAG_SIZE; }
-    [[nodiscard]] std::error_code encrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept override;
-    [[nodiscard]] std::error_code decrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<const std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept override;
-    static std::error_code encrypt_oneshot(
-        std::span<std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        std::span<std::byte, TAG_SIZE> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    static std::error_code decrypt_oneshot(
-        std::span<std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        std::span<const std::byte, TAG_SIZE> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-private:
-    static void ghash(
-        std::span<std::byte, 16> output,
-        std::span<const std::byte, 16> h,
-        std::span<const std::byte> data
-    ) noexcept;
-    static void increment_counter(std::span<std::byte, 16> counter) noexcept;
-};
-template<size_t KeySize>
-class aes_cmac {
-public:
-    static constexpr size_t KEY_SIZE = KeySize;
-    static constexpr size_t MAC_SIZE = 16;  // Always 128 bits regardless of key size
-    static constexpr size_t BLOCK_SIZE = 16;
-    explicit aes_cmac(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    ~aes_cmac() noexcept;
-    void update(std::span<const std::byte> data) noexcept;
-    void finalize(std::span<std::byte, MAC_SIZE> mac) noexcept;
-    void reset() noexcept;
-    static void compute(
-        std::span<const std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<std::byte, MAC_SIZE> mac
-    ) noexcept;
-    [[nodiscard]] static bool verify(
-        std::span<const std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, MAC_SIZE> mac
-    ) noexcept;
-private:
-    struct cipher_impl;
-    std::unique_ptr<cipher_impl> cipher;
-    alignas(16) std::array<std::byte, BLOCK_SIZE> k1{};  // First subkey
-    alignas(16) std::array<std::byte, BLOCK_SIZE> k2{};  // Second subkey
-    alignas(16) std::array<std::byte, BLOCK_SIZE> state{};  // Current state
-    alignas(16) std::array<std::byte, BLOCK_SIZE> buffer{};  // Partial block buffer
-    size_t buffer_pos = 0;
-    void generate_subkeys() noexcept;
-    void process_block(std::span<const std::byte, BLOCK_SIZE> block) noexcept;
-    static void left_shift_one(std::span<std::byte, BLOCK_SIZE> data) noexcept;
-};
-using aes_cmac_128 = aes_cmac<16>;
-using aes_cmac_256 = aes_cmac<32>;
-using cmac128 = aes_cmac_128;
-using cmac256 = aes_cmac_256;
-class secure_random {
-public:
-    [[nodiscard]] static std::error_code generate(std::span<std::byte> buffer) noexcept;
-    template<typename T>
-    requires std::is_trivially_copyable_v<T>
-    [[nodiscard]] static result<T> generate() noexcept {
-        T value;
-        auto ec = generate(std::span<std::byte>(
-            reinterpret_cast<std::byte*>(&value), 
-            sizeof(T)
-        ));
-        if (ec) {
-            return std::unexpected(ec);
+        secure_alloc();
+        std::memcpy(this->private_key, private_key_.data(), key_size_);
+        std::memcpy(this->public_key, public_key.data(), key_size_);
+    }
+    ~SecureKey() {
+        secure_free();
+    }
+    SecureKey(const SecureKey&) = delete; // Disable copy constructor
+    SecureKey& operator=(const SecureKey&) = delete; // Disable copy assignment
+    SecureKey(SecureKey&& other) noexcept : private_key(other.private_key), key_size_(other.key_size_) {
+        other.private_key = nullptr; // Transfer ownership
+    }
+    SecureKey& operator=(SecureKey&& other) noexcept {
+        if (this != &other) {
+            secure_free(); // Clean up current key
+            key_size_ = other.key_size_;
+            private_key = other.private_key;
+            other.private_key = nullptr; // Transfer ownership
         }
-        return value;
+        return *this;
     }
-    template<size_t N>
-    [[nodiscard]] static result<std::array<std::byte, N>> generate_array() noexcept {
-        std::array<std::byte, N> arr;
-        auto ec = generate(arr);
-        if (ec) {
-            return std::unexpected(ec);
-        }
-        return arr;
+    [[nodiscard]] std::span<const uint8_t> get_key() const noexcept {
+        return std::span<const uint8_t>(private_key, key_size_);
     }
-    template<size_t N>
-    [[nodiscard]] static result<std::array<std::byte, N>> generate_key() noexcept {
-        return generate_array<N>();
-    }
-    template<size_t N>
-    [[nodiscard]] static result<std::array<std::byte, N>> generate_nonce() noexcept {
-        return generate_array<N>();
-    }
-private:
-    secure_random() = delete;  // Static class only
-};
-template<typename T>
-class secure_allocator {
-public:
-    using value_type = T;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    secure_allocator() noexcept = default;
-    template<typename U>
-    secure_allocator(const secure_allocator<U>&) noexcept {}
-    [[nodiscard]] T* allocate(size_type n);
-    void deallocate(T* p, size_type n) noexcept;
-    template<typename U>
-    struct rebind {
-        using other = secure_allocator<U>;
-    };
-    friend bool operator==(const secure_allocator&, const secure_allocator&) noexcept {
-        return true;
-    }
-};
-template<size_t N>
-class secure_buffer {
-public:
-    static constexpr size_t size = N;
-    secure_buffer() noexcept;
-    ~secure_buffer() noexcept;
-    secure_buffer(const secure_buffer&) = delete;
-    secure_buffer& operator=(const secure_buffer&) = delete;
-    secure_buffer(secure_buffer&& other) noexcept;
-    secure_buffer& operator=(secure_buffer&& other) noexcept;
-    [[nodiscard]] std::span<std::byte, N> span() noexcept {
-        return std::span<std::byte, N>(data_, N);
-    }
-    [[nodiscard]] std::span<const std::byte, N> span() const noexcept {
-        return std::span<const std::byte, N>(data_, N);
-    }
-    [[nodiscard]] std::byte* data() noexcept { return data_; }
-    [[nodiscard]] const std::byte* data() const noexcept { return data_; }
-    void clear() noexcept;
-    void fill(std::span<const std::byte, N> source) noexcept;
-private:
-    alignas(16) std::byte data_[N];
-    bool locked_ = false;
-    void lock_memory() noexcept;
-    void unlock_memory() noexcept;
-};
-using secure_string = std::basic_string<char, std::char_traits<char>, 
-                                        secure_allocator<char>>;
-// Forward declarations
-void secure_clear(void* ptr, size_t size) noexcept;
-void ghash_portable(
-    std::array<std::byte, 16>& accumulator,
-    const std::array<std::byte, 16>& h,
-    std::span<const std::byte> data
-) noexcept;
-
-template<typename T>
-using secure_vector = std::vector<T, secure_allocator<T>>;
-template<typename T, size_t N>
-class secure_array : public std::array<T, N> {
-public:
-    ~secure_array() { secure_clear(this->data(), N * sizeof(T)); }
-    using std::array<T, N>::array;
-};
-[[nodiscard]] bool secure_compare(
-    const void* a, 
-    const void* b, 
-    size_t size
-) noexcept;
-template<size_t KeySize>
-class secure_key {
-public:
-    static constexpr size_t size = KeySize;
-    using key_type = secure_buffer<KeySize>;
-    secure_key() noexcept = default;
-    [[nodiscard]] static result<secure_key> generate() noexcept {
-        secure_key key;
-        auto ec = secure_random::generate(key.key_.span());
-        if (ec) return std::unexpected(ec);
-        key.created_at_ = std::chrono::steady_clock::now();
-        return key;
-    }
-    [[nodiscard]] static secure_key from_bytes(std::span<const std::byte, KeySize> key_data) noexcept {
-        secure_key key;
-        key.key_.fill(key_data);
-        key.created_at_ = std::chrono::steady_clock::now();
-        return key;
-    }
-    [[nodiscard]] static result<secure_key> from_password(
-        std::string_view password,
-        std::span<const std::byte> salt,
-        uint32_t iterations = 100000
-    ) noexcept;
-    [[nodiscard]] std::span<const std::byte, KeySize> span() const noexcept {
-        return key_.span();
-    }
-    [[nodiscard]] const std::byte* data() const noexcept {
-        return key_.data();
-    }
-    [[nodiscard]] bool is_empty() const noexcept {
-        for (auto b : key_.span()) {
-            if (b != std::byte{0}) return false;
-        }
-        return true;
-    }
-    [[nodiscard]] std::chrono::steady_clock::duration age() const noexcept {
-        return std::chrono::steady_clock::now() - created_at_;
-    }
-    [[nodiscard]] bool should_rotate(std::chrono::steady_clock::duration max_age) const noexcept {
-        return age() > max_age;
+    [[nodiscard]] size_t size() const noexcept {
+        return key_size_;
     }
     void clear() noexcept {
-        key_.clear();
-        created_at_ = {};
+        if (private_key) {
+            OPENSSL_cleanse(private_key, key_size_);
+            std::memset(private_key, 0, key_size_); // Clear sensitive data
+        }
     }
-    [[nodiscard]] bool operator==(const secure_key& other) const noexcept {
-        return secure_compare(key_.data(), other.key_.data(), KeySize);
+    [[nodiscard]] bool is_empty() const noexcept {
+        if (!private_key) return true;
+        return false;
     }
-    [[nodiscard]] result<secure_vector<std::byte>> export_protected(
-        std::span<const std::byte, 32> protection_key
-    ) const noexcept;
-    [[nodiscard]] static result<secure_key> import_protected(
-        std::span<const std::byte> encrypted_data,
-        std::span<const std::byte, 32> protection_key
-    ) noexcept;
-private:
-    key_type key_;
-    std::chrono::steady_clock::time_point created_at_;
-};
-using secure_key_128 = secure_key<16>;   // 128-bit keys
-using secure_key_192 = secure_key<24>;   // 192-bit keys
-using secure_key_256 = secure_key<32>;   // 256-bit keys
-using secure_key_512 = secure_key<64>;   // 512-bit keys
-using aes256_key = secure_key<32>;
-using chacha20_key = secure_key<32>;
-using x25519_private_key = secure_key<32>;
-using x25519_key = x25519_private_key;  // Alias for convenience
-using blake3_key = secure_key<32>;
-class hkdf {
-public:
-    [[nodiscard]] static std::error_code derive_sha256(
-        std::span<const std::byte> ikm,
-        std::span<const std::byte> salt,
-        std::span<const std::byte> info,
-        std::span<std::byte> okm
-    ) noexcept;
-    [[nodiscard]] static std::error_code derive_sha512(
-        std::span<const std::byte> ikm,
-        std::span<const std::byte> salt,
-        std::span<const std::byte> info,
-        std::span<std::byte> okm
-    ) noexcept;
-    static void extract_sha256(
-        std::span<const std::byte> salt,
-        std::span<const std::byte> ikm,
-        std::span<std::byte, 32> prk
-    ) noexcept;
-    static void extract_sha512(
-        std::span<const std::byte> salt,
-        std::span<const std::byte> ikm,
-        std::span<std::byte, 64> prk
-    ) noexcept;
-    [[nodiscard]] static std::error_code expand_sha256(
-        std::span<const std::byte, 32> prk,
-        std::span<const std::byte> info,
-        std::span<std::byte> okm
-    ) noexcept;
-    [[nodiscard]] static std::error_code expand_sha512(
-        std::span<const std::byte, 64> prk,
-        std::span<const std::byte> info,
-        std::span<std::byte> okm
-    ) noexcept;
-private:
-    static constexpr size_t MAX_OUTPUT_SHA256 = 255 * 32;
-    static constexpr size_t MAX_OUTPUT_SHA512 = 255 * 64;
-};
-class aes128 {
-public:
-    static constexpr size_t BLOCK_SIZE = 16;  // 128 bits
-    static constexpr size_t KEY_SIZE = 16;    // 128 bits
-    static constexpr size_t ROUNDS = 10;      // AES-128 uses 10 rounds
-    explicit aes128(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    void encrypt_block(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-    void decrypt_block(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-private:
-    alignas(16) std::array<std::byte, (ROUNDS + 1) * BLOCK_SIZE> round_keys{};
-    bool use_hw_acceleration = false;
-    void key_expansion(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    void encrypt_block_sw(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-    void decrypt_block_sw(std::span<std::byte, BLOCK_SIZE> block) noexcept;
-};
-#ifdef __APPLE__
-bool aes128_commoncrypto_available() noexcept;
-void aes128_encrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept;
-void aes128_decrypt_block_cc(const uint8_t* key, uint8_t* block) noexcept;
-#endif
-#if defined(__AES__) && (defined(__x86_64__) || defined(__i386__))
-void aes128_encrypt_block_ni(const uint8_t* round_keys, uint8_t* block) noexcept;
-void aes128_decrypt_block_ni(const uint8_t* round_keys, uint8_t* block) noexcept;
-void aes128_key_expansion_ni(const uint8_t* key, uint8_t* round_keys) noexcept;
-#endif
-class chacha20 {
-public:
-    static constexpr size_t KEY_SIZE = 32;
-    static constexpr size_t NONCE_SIZE = 12;
-    static constexpr size_t BLOCK_SIZE = 64;
-    static void quarter_round(uint32_t& a, uint32_t& b, uint32_t& c, uint32_t& d) noexcept;
-    static void generate_block(
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        uint32_t counter,
-        std::span<std::byte, BLOCK_SIZE> output
-    ) noexcept;
-    static void crypt(
-        std::span<std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        uint32_t counter = 0
-    ) noexcept;
-private:
-    [[nodiscard]] static constexpr uint32_t rotl(uint32_t x, int n) noexcept {
-        return (x << n) | (x >> (32 - n));
+    [[nodiscard]] bool operator==(const SecureKey& other) const noexcept {
+        if (key_size_ != other.key_size_) return false;
+        return std::equal(private_key, private_key + key_size_, other.private_key);
+    }
+    [[nodiscard]] std::string to_hex() const {
+        std::string hex_str;
+        hex_str.reserve(key_size_ * 2);
+        for (size_t i = 0; i < key_size_; ++i) {
+            hex_str += "0123456789abcdef"[private_key[i] >> 4];
+            hex_str += "0123456789abcdef"[private_key[i] & 0x0F];
+        }
+        return hex_str;
+    }
+    [[nodiscard]] static SecureKey from_hex(const std::string& hex_str) {
+        if (hex_str.size() % 2 != 0) {
+            throw std::invalid_argument("Hex string must have an even length");
+        }
+        size_t key_size = hex_str.size() / 2;
+        SecureKey key(key_size);
+
+        for (size_t i = 0; i < key_size; ++i) {
+            char byte_str[3] = { hex_str[i * 2], hex_str[i * 2 + 1], '\0' };
+            unsigned long byte_value = strtoul(byte_str, nullptr, 16);
+            if (byte_value > 255) {
+                throw std::invalid_argument("Invalid hex string");
+            }
+            key.private_key[i] = static_cast<uint8_t>(byte_value);
+        }
+        return key;
+    }
+    [[nodiscard]] static SecureKey generate(size_t key_size) {
+        SecureKey key(key_size);
+        if (RAND_bytes(key.private_key, key_size) != 1) {
+            throw std::runtime_error("Failed to generate secure random key");
+        }
+        return key;
+    }
+    [[nodiscard]] static SecureKey from_password(
+        const std::string& password,
+        const std::span<const uint8_t> salt,
+        uint32_t iterations = 100000
+    ) {
+        if (salt.size() < 8) {
+            throw std::invalid_argument("Salt must be at least 8 bytes");
+        }
+        SecureKey key(32); // 32 bytes for SHA-256
+        if (PKCS5_PBKDF2_HMAC(
+            password.c_str(), password.size(),
+            salt.data(), salt.size(),
+            iterations, EVP_sha256(),
+            key.size(), key.private_key
+        ) != 1) {
+            throw std::runtime_error("Failed to derive key from password");
+        }
+        return key;
+    }
+    [[nodiscard]] static SecureKey from_protected(
+        const std::span<const uint8_t> encrypted_data,
+        const std::span<const uint8_t, 32> protection_key
+    ) {
+        if (encrypted_data.size() < 32) {
+            throw std::invalid_argument("Encrypted data must be at least 32 bytes");
+        }
+        SecureKey key(32);
+        EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            throw std::runtime_error("Failed to create cipher context");
+        }
+        if (EVP_DecryptInit_ex(
+            ctx, EVP_aes_256_gcm(), nullptr,
+            protection_key.data(), nullptr
+        ) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize decryption");
+        }
+        int outlen;
+        if (EVP_DecryptUpdate(
+            ctx, key.private_key, &outlen,
+            encrypted_data.data(), static_cast<int>(encrypted_data.size())
+        ) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Decryption failed");
+        }
+        if (EVP_DecryptFinal_ex(ctx, key.private_key + outlen, &outlen) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Decryption finalization failed");
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        return key;
+    }
+    uint8_t* get_private_key() const noexcept {
+        return private_key;
+    }
+    uint8_t* get_public_key() const noexcept {
+        return public_key;
     }
 };
-class poly1305 {
-public:
-    static constexpr size_t KEY_SIZE = 32;
-    static constexpr size_t TAG_SIZE = 16;
-    poly1305() noexcept = default;
-    void init(std::span<const std::byte, KEY_SIZE> key) noexcept;
-    void update(std::span<const std::byte> data) noexcept;
-    void finalize(std::span<std::byte, TAG_SIZE> tag) noexcept;
-    static void auth(
-        std::span<const std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<std::byte, TAG_SIZE> tag
-    ) noexcept;
+
+class Encryptor {
 private:
-    uint32_t r_[5] = {0};  // Clamped part of key
-    uint32_t h_[5] = {0};  // Accumulator
-    uint32_t pad_[4] = {0}; // Encrypted nonce
-    size_t leftover_ = 0;
-    uint8_t buffer_[16] = {0};
-    bool finalized_ = false;
-    void process_block(const uint8_t* block, bool final = false) noexcept;
-};
-class chacha20_poly1305 final : public encryption_algorithm {
+    std::unique_ptr<SecureKey> key_;
+    std::unique_ptr<SecureKey> sign_keypair;
+    std::unique_ptr<SecureKey> enc_keypair;
+    std::unique_ptr<SecureKey> public_key_;
 public:
-    static constexpr size_t KEY_SIZE = 32;
-    static constexpr size_t NONCE_SIZE = 12;
-    static constexpr size_t TAG_SIZE = 16;
-    [[nodiscard]] size_t key_size() const noexcept override { return KEY_SIZE; }
-    [[nodiscard]] size_t nonce_size() const noexcept override { return NONCE_SIZE; }
-    [[nodiscard]] size_t tag_size() const noexcept override { return TAG_SIZE; }
-    [[nodiscard]] std::error_code encrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept override;
-    [[nodiscard]] std::error_code decrypt(
-        std::span<std::byte> data,
-        std::span<const std::byte> key,
-        std::span<const std::byte> nonce,
-        std::span<const std::byte> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept override;
-    [[nodiscard]] static std::error_code encrypt_oneshot(
-        std::span<std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        std::span<std::byte, TAG_SIZE> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    [[nodiscard]] static std::error_code decrypt_oneshot(
-        std::span<std::byte> data,
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        std::span<const std::byte, TAG_SIZE> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
+    Encryptor(bool generate_key = true) {
+        if (generate_key) {
+            key_ = std::make_unique<SecureKey>(SecureKey::generate(32)); // 32 bytes for AES-256
+        } else {
+            key_ = std::make_unique<SecureKey>(SecureKey::KeyType::AES_256, false);
+        }
+    }
+    Encryptor(const SecureKey& key) = delete; // Cannot copy SecureKey
+    Encryptor(SecureKey&& key) 
+        : key_(std::make_unique<SecureKey>(std::move(key))) {}
+    Encryptor(const Encryptor&) = delete; // Disable copy constructor
+    Encryptor& operator=(const Encryptor&) = delete; // Disable copy assignment
+    Encryptor(Encryptor&& other) noexcept 
+        : key_(std::move(other.key_)), public_key_(std::move(other.public_key_)) {
+        other.key_ = nullptr; // Transfer ownership
+    }
+    Encryptor& operator=(Encryptor&& other) noexcept {
+        if (this != &other) {
+            key_ = std::move(other.key_);
+            public_key_ = std::move(other.public_key_);
+            other.key_ = nullptr; // Transfer ownership
+        }
+        return *this;
+    }
+    void import_key(const std::string& key_pair, bool is_private_key) {
+        if (is_private_key) {
+            if (key_pair.length() != 64) throw std::invalid_argument("Key size must be 64 std::string");
+            std::vector<uint8_t> sign_key(32);
+            std::vector<uint8_t> enc_key(32);
+            std::memcpy(sign_key.data(), key_pair.data(), 32);
+            std::memcpy(enc_key.data(), key_pair.data() + 32, 32);
+            std::vector<uint8_t> sign_pubkey(32);
+            std::vector<uint8_t> enc_pubkey(32);
+            EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, sign_key.data(), sign_key.size());
+            if (!pkey) throw std::runtime_error("Failed to create private key");
+            size_t pubkey_len = 32;
+            if (EVP_PKEY_get_raw_public_key(pkey, sign_pubkey.data(), &pubkey_len) != 1) {
+                EVP_PKEY_free(pkey);
+                throw std::runtime_error("Failed to get public key");
+            }
+            EVP_PKEY_free(pkey);
+            sign_keypair = std::make_unique<SecureKey>(std::span<const uint8_t>(sign_pubkey.data(), sign_pubkey.size()), std::span<const uint8_t>(sign_key.data(), sign_key.size()));
+            EVP_PKEY* pkey2 = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, nullptr, enc_key.data(), enc_key.size());
+            if (!pkey2) throw std::runtime_error("Failed to create private key");
+            size_t pubkey_len2 = 32;
+            if (EVP_PKEY_get_raw_public_key(pkey2, enc_pubkey.data(), &pubkey_len2) != 1) {
+                EVP_PKEY_free(pkey2);
+                throw std::runtime_error("Failed to get public key");
+            }
+            EVP_PKEY_free(pkey2);
+            enc_keypair = std::make_unique<SecureKey>(std::span<const uint8_t>(enc_pubkey.data(), enc_pubkey.size()), std::span<const uint8_t>(enc_key.data(), enc_key.size()));
+        } else {
+            if (key_pair.length() != 64) throw std::invalid_argument("Key size must be 64 std::string");
+            std::vector<uint8_t> sign_key(32);
+            std::vector<uint8_t> enc_key(32);
+            std::memcpy(sign_key.data(), key_pair.data(), 32);
+            std::memcpy(enc_key.data(), key_pair.data() + 32, 32);
+            // These are just public keys, no need to derive private keys
+            sign_keypair = std::make_unique<SecureKey>(std::span<const uint8_t>(sign_key.data(), sign_key.size()), std::span<const uint8_t>(sign_key.data(), sign_key.size()));
+            enc_keypair = std::make_unique<SecureKey>(std::span<const uint8_t>(enc_key.data(), enc_key.size()), std::span<const uint8_t>(enc_key.data(), enc_key.size()));
+        }
+    }
+    [[nodiscard]] const SecureKey& get_key() const noexcept {
+        return *key_;
+    }
+    [[nodiscard]] const SecureKey& get_public_key() const noexcept {
+        return *public_key_;
+    }
+    [[nodiscard]] const SecureKey& get_sign_keypair() const noexcept {
+        return *sign_keypair;
+    }
+    [[nodiscard]] const SecureKey& get_enc_keypair() const noexcept {
+        return *enc_keypair;
+    }
+    void encrypt(
+        std::span<const uint8_t> plaintext,
+        std::span<uint8_t> ciphertext
+    ) const {
+        if (ciphertext.size() < plaintext.size() + 16 + 12) { // 16 for tag, 12 for IV
+            throw std::runtime_error("Ciphertext buffer too small");
+        }
+        
+        // Generate random IV (12 bytes for GCM)
+        uint8_t iv[12];
+        if (RAND_bytes(iv, sizeof(iv)) != 1) {
+            throw std::runtime_error("Failed to generate IV");
+        }
+        
+        // Copy IV to beginning of ciphertext
+        std::memcpy(ciphertext.data(), iv, sizeof(iv));
+        
+        EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            throw std::runtime_error("Failed to create cipher context");
+        }
+        
+        if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize encryption");
+        }
+        
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to set IV length");
+        }
+        
+        if (EVP_EncryptInit_ex(ctx, nullptr, nullptr, key_->get_key().data(), iv) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to set key and IV");
+        }
+        
+        int outlen;
+        if (EVP_EncryptUpdate(ctx, ciphertext.data() + 12, &outlen, plaintext.data(), static_cast<int>(plaintext.size())) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Encryption failed");
+        }
+        
+        int tmplen;
+        if (EVP_EncryptFinal_ex(ctx, ciphertext.data() + 12 + outlen, &tmplen) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Encryption finalization failed");
+        }
+        outlen += tmplen;
+        
+        // Get and append tag
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, ciphertext.data() + 12 + outlen) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to get GCM tag");
+        }
+        
+        EVP_CIPHER_CTX_free(ctx);
+    }
+    void decrypt(
+        std::span<const uint8_t> ciphertext,
+        std::span<uint8_t> plaintext
+    ) const {
+        if (ciphertext.size() < 16 + 12) { // 16 for tag, 12 for IV
+            throw std::runtime_error("Ciphertext buffer too small");
+        }
+        if (plaintext.size() < ciphertext.size() - 16 - 12) {
+            throw std::runtime_error("Plaintext buffer too small");
+        }
+        
+        // Extract IV from beginning of ciphertext
+        uint8_t iv[12];
+        std::memcpy(iv, ciphertext.data(), sizeof(iv));
+        
+        EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            throw std::runtime_error("Failed to create cipher context");
+        }
+        
+        if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize decryption");
+        }
+        
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to set IV length");
+        }
+        
+        if (EVP_DecryptInit_ex(ctx, nullptr, nullptr, key_->get_key().data(), iv) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to set key and IV");
+        }
+        
+        // Ciphertext starts after IV, tag is at the end
+        int ciphertext_len = static_cast<int>(ciphertext.size() - 12 - 16);
+        
+        int outlen;
+        if (EVP_DecryptUpdate(ctx, plaintext.data(), &outlen, ciphertext.data() + 12, ciphertext_len) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Decryption failed");
+        }
+        
+        // Set tag before finalizing
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, const_cast<uint8_t*>(ciphertext.data() + ciphertext.size() - 16)) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Failed to set GCM tag");
+        }
+        
+        int tmplen;
+        if (EVP_DecryptFinal_ex(ctx, plaintext.data() + outlen, &tmplen) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("Decryption finalization failed - authentication failed");
+        }
+        outlen += tmplen;
+        
+        EVP_CIPHER_CTX_free(ctx);
+    }
+    std::span<const uint8_t> sign(
+        std::span<const uint8_t> data
+    ) const {
+        if (!sign_keypair) {
+            throw std::runtime_error("Signing keypair not initialized");
+        }
+        EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr,
+                                                       sign_keypair->get_private_key(), 32);
+        if (!pkey) {
+            throw std::runtime_error("Failed to create private key");
+        }
+        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, nullptr);
+        if (!ctx) {
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to create signing context");
+        }
+        if (EVP_PKEY_sign_init(ctx) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to initialize signing");
+        }
+        size_t siglen;
+        if (EVP_PKEY_sign(ctx, nullptr, &siglen, data.data(), data.size()) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to determine signature length");
+        }
+        std::vector<uint8_t> signature(siglen);
+        if (EVP_PKEY_sign(ctx, signature.data(), &siglen, data.data(), data.size()) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Signing failed");
+        }
+        EVP_PKEY_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        return std::span<const uint8_t>(signature.data(), siglen);
+    }
+    bool verify(
+        std::span<const uint8_t> data,
+        std::span<const uint8_t> signature
+    ) const {       
+        if (!sign_keypair) {
+            throw std::runtime_error("Signing keypair not initialized");
+        }
+        EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, 
+                                                      sign_keypair->get_public_key(), 32);
+        if (!pkey) {
+            throw std::runtime_error("Failed to create public key");
+        }
+        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, nullptr);
+        if (!ctx) {
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to create verification context");
+        }
+        if (EVP_PKEY_verify_init(ctx) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to initialize verification");
+        }
+        int result = EVP_PKEY_verify(ctx, signature.data(), signature.size(), data.data(), data.size());
+        EVP_PKEY_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        if (result <= 0) {
+            if (result < 0) {
+                throw std::runtime_error("Verification failed");
+            }
+            return false; // Signature does not match
+        }
+        return true; // Signature matches
+    }
+    std::vector<uint8_t> sha256(
+        std::span<const uint8_t> data
+    ) const {
+        std::vector<uint8_t> hash(SHA256_DIGEST_LENGTH);
+        if (SHA256(data.data(), data.size(), hash.data()) == nullptr) {
+            throw std::runtime_error("SHA-256 hashing failed");
+        }
+        return hash;
+    }
+    std::vector<uint8_t> sha512(
+        std::span<const uint8_t> data
+    ) const {
+        std::vector<uint8_t> hash(SHA512_DIGEST_LENGTH);
+        if (SHA512(data.data(), data.size(), hash.data()) == nullptr) {
+            throw std::runtime_error("SHA-512 hashing failed");
+        }
+        return hash;
+    }
+    std::vector<uint8_t> hmac_sha256(
+        std::span<const uint8_t> data
+    ) const {
+        if (!key_) {
+            throw std::runtime_error("HMAC key not initialized");
+        }
+        std::vector<uint8_t> hmac(SHA256_DIGEST_LENGTH);
+        unsigned int hmac_len;
+        if (HMAC(EVP_sha256(), key_->get_key().data(), key_->size(),
+                 data.data(), data.size(), hmac.data(), &hmac_len) == nullptr) {
+            throw std::runtime_error("HMAC-SHA256 failed");
+        }
+        hmac.resize(hmac_len);
+        return hmac;
+    }
+    std::vector<uint8_t> hmac_sha512(
+        std::span<const uint8_t> data
+    ) const {
+        if (!key_) {
+            throw std::runtime_error("HMAC key not initialized");
+        }
+        std::vector<uint8_t> hmac(SHA512_DIGEST_LENGTH);
+        unsigned int hmac_len;
+        if (HMAC(EVP_sha512(), key_->get_key().data(), key_->size(),
+                 data.data(), data.size(), hmac.data(), &hmac_len) == nullptr) {
+            throw std::runtime_error("HMAC-SHA512 failed");
+        }
+        hmac.resize(hmac_len);
+        return hmac;
+    }
+    std::span<const uint8_t> cmac_aes128(
+        std::span<const uint8_t> data
+    ) const {
+        if (!key_) {
+            throw std::runtime_error("CMAC key not initialized");
+        }
+        std::vector<uint8_t> cmac(EVP_MAX_MD_SIZE);
+        size_t cmac_len;
+        EVP_MAC_CTX* ctx = EVP_MAC_CTX_new(EVP_MAC_fetch(nullptr, "CMAC", nullptr));
+        if (!ctx) {
+            throw std::runtime_error("Failed to create CMAC context");
+        }
+        if (EVP_MAC_init(ctx, key_->get_key().data(), key_->size(), nullptr) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize CMAC");
+        }
+        if (EVP_MAC_update(ctx, data.data(), data.size()) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("CMAC update failed");
+        }
+        if (EVP_MAC_final(ctx, cmac.data(), &cmac_len, cmac.size()) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("CMAC finalization failed");
+        }
+        EVP_MAC_CTX_free(ctx);
+        return std::span<const uint8_t>(cmac.data(), cmac_len);
+    }
+    std::span<const uint8_t> cmac_aes256(
+        std::span<const uint8_t> data 
+    ) const {
+        if (!key_) {
+            throw std::runtime_error("CMAC key not initialized");
+        }
+        std::vector<uint8_t> cmac(EVP_MAX_MD_SIZE);
+        size_t cmac_len;
+        EVP_MAC_CTX* ctx = EVP_MAC_CTX_new(EVP_MAC_fetch(nullptr, "CMAC", nullptr));
+        if (!ctx) {
+            throw std::runtime_error("Failed to create CMAC context");
+        }
+        if (EVP_MAC_init(ctx, key_->get_key().data(), key_->size(), nullptr) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize CMAC");
+        }
+        if (EVP_MAC_update(ctx, data.data(), data.size()) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("CMAC update failed");
+        }
+        if (EVP_MAC_final(ctx, cmac.data(), &cmac_len, cmac.size()) != 1) {
+            EVP_MAC_CTX_free(ctx);
+            throw std::runtime_error("CMAC finalization failed");
+        }
+        EVP_MAC_CTX_free(ctx);
+        return std::span<const uint8_t>(cmac.data(), cmac_len);
+    }
+};
+class CompressionAlgorithm {
+public:
+    static std::shared_ptr<goldenhash::GoldenHash> hash;
+    virtual ~CompressionAlgorithm() = default;
+    [[nodiscard]] virtual size_t max_compressed_size(size_t uncompressed_size) const noexcept = 0;
+    [[nodiscard]] virtual result<size_t> compress(std::span<const std::byte> input, std::span<std::byte> output) noexcept = 0;
+    [[nodiscard]] virtual result<size_t> decompress(std::span<const std::byte> input, std::span<std::byte> output) noexcept = 0;
+};
+class lz4 final : public CompressionAlgorithm {
+public:
+    static constexpr size_t MIN_MATCH = 4;          // Minimum match length
+    static constexpr size_t MAX_DISTANCE = 65535;   // Maximum offset (16-bit)
+    static constexpr size_t HASH_TABLE_SIZE = 12415; // Hash table size (12-bit)
+    static constexpr size_t ML_BITS = 4;            // Match length bits in token
+    static constexpr size_t ML_MASK = (1U << ML_BITS) - 1;
+    static constexpr size_t RUN_BITS = 8 - ML_BITS; // Literal length bits
+    static constexpr size_t RUN_MASK = (1U << RUN_BITS) - 1;
+    static constexpr uint8_t LAST_LITERAL_SIZE = 5;  // Minimum end literals
+    static constexpr uint8_t MFLIMIT = 12;           // Minimum input for match
+    lz4() noexcept = default;
+    ~lz4() override = default;
+    [[nodiscard]] size_t max_compressed_size(size_t uncompressed_size) const noexcept override;
+    [[nodiscard]] result<size_t> compress(std::span<const std::byte> input, std::span<std::byte> output) noexcept override;
+    [[nodiscard]] result<size_t> decompress(std::span<const std::byte> input, std::span<std::byte> output) noexcept override;
+    [[nodiscard]] result<size_t> compress_hc(std::span<const std::byte> input, std::span<std::byte> output) noexcept;
+    [[nodiscard]] result<size_t> compress_fast(std::span<const std::byte> input, std::span<std::byte> output, int acceleration = 1) noexcept;
 private:
-    static void generate_poly_key(
-        std::span<const std::byte, KEY_SIZE> key,
-        std::span<const std::byte, NONCE_SIZE> nonce,
-        std::span<std::byte, 32> poly_key
+    [[nodiscard]] static uint32_t read32(const uint8_t* ptr) noexcept {
+        uint32_t val;
+        std::memcpy(&val, ptr, sizeof(val));
+        #ifdef __BIG_ENDIAN__
+            val = __builtin_bswap32(val);
+        #endif
+        return val;
+    }
+    [[nodiscard]] static uint16_t read16(const uint8_t* ptr) noexcept {
+        uint16_t val;
+        std::memcpy(&val, ptr, sizeof(val));
+        #ifdef __BIG_ENDIAN__
+            val = __builtin_bswap16(val);
+        #endif
+        return val;
+    }
+    static void write16(uint8_t* ptr, uint16_t val) noexcept {
+        #ifdef __BIG_ENDIAN__
+            val = __builtin_bswap16(val);
+        #endif
+        std::memcpy(ptr, &val, sizeof(val));
+    }
+    [[nodiscard]] static size_t count_match(
+        const uint8_t* pIn,
+        const uint8_t* pMatch,
+        const uint8_t* pInLimit
     ) noexcept;
-    static void pad16(poly1305& poly, size_t len) noexcept;
+    static uint8_t* write_length(
+        uint8_t* op,
+        size_t length,
+        uint8_t* token,
+        bool is_literal
+    ) noexcept;
+    static void wild_copy(uint8_t* dst, const uint8_t* src, uint8_t* dst_end) noexcept;
 };
-class ed25519 {
+class lz4_frame {
 public:
-    static constexpr size_t PRIVATE_KEY_SIZE = 32;
-    static constexpr size_t PUBLIC_KEY_SIZE = 32;
-    static constexpr size_t SIGNATURE_SIZE = 64;
-    static constexpr size_t SEED_SIZE = 32;
-    struct key_pair {
-        std::array<std::byte, PRIVATE_KEY_SIZE> private_key;
-        std::array<std::byte, PUBLIC_KEY_SIZE> public_key;
+    static constexpr uint32_t MAGIC = 0x184D2204;  // LZ4 frame magic number
+    struct frame_descriptor {
+        bool content_checksum;
+        bool content_size;
+        bool block_checksum;
+        bool block_independence;
+        uint32_t max_block_size;
+        frame_descriptor() 
+            : content_checksum(false)
+            , content_size(false)
+            , block_checksum(false)
+            , block_independence(true)
+            , max_block_size(65536) {}
     };
-    [[nodiscard]] static result<key_pair> generate_key_pair() noexcept;
-    [[nodiscard]] static result<key_pair> key_pair_from_seed(
-        std::span<const std::byte, SEED_SIZE> seed
-    ) noexcept;
-    static void public_key_from_private(
-        std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
-        std::span<std::byte, PUBLIC_KEY_SIZE> public_key
-    ) noexcept;
-    [[nodiscard]] static std::error_code sign(
-        std::span<const std::byte> message,
-        std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
-        std::span<std::byte, SIGNATURE_SIZE> signature
-    ) noexcept;
-    [[nodiscard]] static bool verify(
-        std::span<const std::byte> message,
-        std::span<const std::byte, SIGNATURE_SIZE> signature,
-        std::span<const std::byte, PUBLIC_KEY_SIZE> public_key
-    ) noexcept;
-    [[nodiscard]] static std::error_code sign_detached(
-        std::span<const std::byte> message,
-        std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
-        std::span<std::byte, SIGNATURE_SIZE> signature
-    ) noexcept;
-    [[nodiscard]] static bool verify_detached(
-        std::span<const std::byte> message,
-        std::span<const std::byte, SIGNATURE_SIZE> signature,
-        std::span<const std::byte, PUBLIC_KEY_SIZE> public_key
-    ) noexcept;
-    [[nodiscard]] static bool hardware_accelerated() noexcept;
+    [[nodiscard]] static result<std::vector<std::byte>> compress_frame(std::span<const std::byte> input, const frame_descriptor& desc = {}) noexcept;
+    [[nodiscard]] static result<std::vector<std::byte>> decompress_frame(std::span<const std::byte> input) noexcept;
 };
-class x25519 {
-public:
-    static constexpr size_t PRIVATE_KEY_SIZE = 32;
-    static constexpr size_t PUBLIC_KEY_SIZE = 32;
-    static constexpr size_t SHARED_SECRET_SIZE = 32;
-    static constexpr std::array<uint8_t, 32> BASEPOINT = {
-        9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    };
-    [[nodiscard]] static std::error_code generate_private_key(
-        std::span<std::byte, PRIVATE_KEY_SIZE> private_key
-    ) noexcept;
-    [[nodiscard]] static std::error_code derive_public_key(
-        std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
-        std::span<std::byte, PUBLIC_KEY_SIZE> public_key
-    ) noexcept;
-    [[nodiscard]] static std::error_code compute_shared_secret(
-        std::span<const std::byte, PRIVATE_KEY_SIZE> private_key,
-        std::span<const std::byte, PUBLIC_KEY_SIZE> peer_public_key,
-        std::span<std::byte, SHARED_SECRET_SIZE> shared_secret
-    ) noexcept;
-    struct key_pair {
-        std::array<std::byte, PRIVATE_KEY_SIZE> private_key;
-        std::array<std::byte, PUBLIC_KEY_SIZE> public_key;
-        [[nodiscard]] static std::expected<key_pair, std::error_code> generate() noexcept;
-        [[nodiscard]] std::error_code compute_shared_secret(
-            std::span<const std::byte, PUBLIC_KEY_SIZE> peer_public_key,
-            std::span<std::byte, SHARED_SECRET_SIZE> shared_secret
-        ) const noexcept;
-    };
-    static void scalarmult(
-        uint8_t* out,
-        const uint8_t* scalar,
-        const uint8_t* point
-    ) noexcept;
-private:
-    using fe = std::array<uint64_t, 5>;
-    static void fe_frombytes(fe& h, const uint8_t* s) noexcept;
-    static void fe_tobytes(uint8_t* s, const fe& h) noexcept;
-    static void fe_add(fe& h, const fe& f, const fe& g) noexcept;
-    static void fe_sub(fe& h, const fe& f, const fe& g) noexcept;
-    static void fe_mul(fe& h, const fe& f, const fe& g) noexcept;
-    static void fe_sq(fe& h, const fe& f) noexcept;
-    static void fe_mul121666(fe& h, const fe& f) noexcept;
-    static void fe_invert(fe& out, const fe& z) noexcept;
-    static void fe_cswap(fe& f, fe& g, unsigned int b) noexcept;
+template<typename T>
+concept HasEncryptedSize = requires(const T& t) {
+    { t.encrypted_size() } -> std::convertible_to<size_t>;
+};
+template<typename T>
+concept HasEncrypt = requires(T& t, std::span<std::byte> buffer, std::span<const std::byte, 32> key) {
+    { t.encrypt(buffer, key) } -> std::convertible_to<size_t>;
+};
+template<typename T>
+concept HasDecrypt = requires(T& t, std::span<const std::byte> data, std::span<const std::byte, 32> key) {
+    { t.decrypt(data, key) } -> std::convertible_to<size_t>;
+};
+enum class WireType : uint8_t {
+    VARINT = 0,
+    FIXED64 = 1,
+    BYTES = 2,
+    START_GROUP = 3,
+    END_GROUP = 4,
+    FIXED32 = 5
 };
 class predictor {
 public:
@@ -1366,412 +1289,4 @@ struct pair_header {
         return h;
     }
 };
-
-class lz4 final : public compression_algorithm {
-public:
-    static constexpr size_t MIN_MATCH = 4;          // Minimum match length
-    static constexpr size_t MAX_DISTANCE = 65535;   // Maximum offset (16-bit)
-    static constexpr size_t HASH_TABLE_SIZE = 4096; // Hash table size (12-bit)
-    static constexpr size_t ML_BITS = 4;            // Match length bits in token
-    static constexpr size_t ML_MASK = (1U << ML_BITS) - 1;
-    static constexpr size_t RUN_BITS = 8 - ML_BITS; // Literal length bits
-    static constexpr size_t RUN_MASK = (1U << RUN_BITS) - 1;
-    static constexpr uint8_t LAST_LITERAL_SIZE = 5;  // Minimum end literals
-    static constexpr uint8_t MFLIMIT = 12;           // Minimum input for match
-    lz4() noexcept = default;
-    ~lz4() override = default;
-    [[nodiscard]] size_t max_compressed_size(size_t uncompressed_size) const noexcept override;
-    [[nodiscard]] result<size_t> compress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept override;
-    [[nodiscard]] result<size_t> decompress(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept override;
-    [[nodiscard]] result<size_t> compress_hc(
-        std::span<const std::byte> input,
-        std::span<std::byte> output
-    ) noexcept;
-    [[nodiscard]] result<size_t> compress_fast(
-        std::span<const std::byte> input,
-        std::span<std::byte> output,
-        int acceleration = 1
-    ) noexcept;
-private:
-    [[nodiscard]] static uint32_t hash4(const uint8_t* ptr, uint32_t h) noexcept {
-        // Simple but effective hash function
-        return ((read32(ptr) * 2654435761U) >> (32 - h));
-    }
-    [[nodiscard]] static uint32_t read32(const uint8_t* ptr) noexcept {
-        uint32_t val;
-        std::memcpy(&val, ptr, sizeof(val));
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap32(val);
-        #endif
-        return val;
-    }
-    [[nodiscard]] static uint16_t read16(const uint8_t* ptr) noexcept {
-        uint16_t val;
-        std::memcpy(&val, ptr, sizeof(val));
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap16(val);
-        #endif
-        return val;
-    }
-    static void write16(uint8_t* ptr, uint16_t val) noexcept {
-        #ifdef __BIG_ENDIAN__
-            val = __builtin_bswap16(val);
-        #endif
-        std::memcpy(ptr, &val, sizeof(val));
-    }
-    [[nodiscard]] static size_t count_match(
-        const uint8_t* pIn,
-        const uint8_t* pMatch,
-        const uint8_t* pInLimit
-    ) noexcept;
-    static uint8_t* write_length(
-        uint8_t* op,
-        size_t length,
-        uint8_t* token,
-        bool is_literal
-    ) noexcept;
-    static void wild_copy(uint8_t* dst, const uint8_t* src, uint8_t* dst_end) noexcept;
-};
-class lz4_frame {
-public:
-    static constexpr uint32_t MAGIC = 0x184D2204;  // LZ4 frame magic number
-    struct frame_descriptor {
-        bool content_checksum;
-        bool content_size;
-        bool block_checksum;
-        bool block_independence;
-        uint32_t max_block_size;
-        frame_descriptor() 
-            : content_checksum(false)
-            , content_size(false)
-            , block_checksum(false)
-            , block_independence(true)
-            , max_block_size(65536) {}
-    };
-    [[nodiscard]] static result<std::vector<std::byte>> compress_frame(
-        std::span<const std::byte> input,
-        const frame_descriptor& desc = {}
-    ) noexcept;
-    [[nodiscard]] static result<std::vector<std::byte>> decompress_frame(
-        std::span<const std::byte> input
-    ) noexcept;
-};
-template<typename T>
-concept HasEncryptedSize = requires(const T& t) {
-    { t.encrypted_size() } -> std::convertible_to<size_t>;
-};
-
-template<typename T>
-concept HasEncrypt = requires(T& t, std::span<std::byte> buffer, std::span<const std::byte, 32> key) {
-    { t.encrypt(buffer, key) } -> std::convertible_to<size_t>;
-};
-
-template<typename T>
-concept HasDecrypt = requires(T& t, std::span<const std::byte> data, std::span<const std::byte, 32> key) {
-    { t.decrypt(data, key) } -> std::convertible_to<size_t>;
-};
-
-enum class WireType : uint8_t {
-    VARINT = 0,
-    FIXED64 = 1,
-    BYTES = 2,
-    START_GROUP = 3,
-    END_GROUP = 4,
-    FIXED32 = 5
-};
-
-class BufferReader {
-public:
-    explicit BufferReader(std::span<const std::byte> data) noexcept 
-        : data_(data), pos_(0) {}
-    
-    [[nodiscard]] std::optional<uint32_t> read_u32() noexcept {
-        if (pos_ + 4 > data_.size()) return std::nullopt;
-        uint32_t val;
-        std::memcpy(&val, data_.data() + pos_, 4);
-        pos_ += 4;
-        return val;
-    }
-    
-    [[nodiscard]] std::optional<uint64_t> read_u64() noexcept {
-        if (pos_ + 8 > data_.size()) return std::nullopt;
-        uint64_t val;
-        std::memcpy(&val, data_.data() + pos_, 8);
-        pos_ += 8;
-        return val;
-    }
-    
-    [[nodiscard]] std::optional<std::string_view> read_string_field() noexcept {
-        auto len = read_u32();
-        if (!len || pos_ + *len > data_.size()) return std::nullopt;
-        std::string_view str(reinterpret_cast<const char*>(data_.data() + pos_), *len);
-        pos_ += *len;
-        return str;
-    }
-    
-    [[nodiscard]] std::optional<std::span<const std::byte>> read_bytes(size_t len) noexcept {
-        if (pos_ + len > data_.size()) return std::nullopt;
-        auto span = data_.subspan(pos_, len);
-        pos_ += len;
-        return span;
-    }
-    
-    [[nodiscard]] std::optional<std::span<const std::byte>> read_bytes_field() noexcept {
-        auto len = read_u32();
-        if (!len) return std::nullopt;
-        return read_bytes(*len);
-    }
-    
-    [[nodiscard]] size_t position() const noexcept { return pos_; }
-    [[nodiscard]] bool has_more() const noexcept { return pos_ < data_.size(); }
-
-private:
-    std::span<const std::byte> data_;
-    size_t pos_;
-};
-
-class BufferWriter {
-public:
-    explicit BufferWriter(std::vector<std::byte>& buffer) noexcept 
-        : buffer_(buffer) {}
-    
-    void write_u32(uint32_t val) noexcept {
-        auto offset = buffer_.size();
-        buffer_.resize(offset + 4);
-        std::memcpy(buffer_.data() + offset, &val, 4);
-    }
-    
-    void write_u64(uint64_t val) noexcept {
-        auto offset = buffer_.size();
-        buffer_.resize(offset + 8);
-        std::memcpy(buffer_.data() + offset, &val, 8);
-    }
-    
-    void write_field_header(uint32_t field_num, WireType type) noexcept {
-        write_u32((field_num << 3) | static_cast<uint32_t>(type));
-    }
-    
-    void write_string(std::string_view str) noexcept {
-        write_u32(static_cast<uint32_t>(str.size()));
-        auto offset = buffer_.size();
-        buffer_.resize(offset + str.size());
-        std::memcpy(buffer_.data() + offset, str.data(), str.size());
-    }
-    
-    void write_string_field(std::string_view str) noexcept {
-        write_string(str);
-    }
-    
-    void write_bytes(std::span<const std::byte> data) noexcept {
-        write_u32(static_cast<uint32_t>(data.size()));
-        auto offset = buffer_.size();
-        buffer_.resize(offset + data.size());
-        std::memcpy(buffer_.data() + offset, data.data(), data.size());
-    }
-    
-    void write_bytes_field(std::span<const std::byte> data) noexcept {
-        write_bytes(data);
-    }
-    
-    [[nodiscard]] size_t size() const noexcept { return buffer_.size(); }
-    [[nodiscard]] size_t position() const noexcept { return buffer_.size(); }
-
-private:
-    std::vector<std::byte>& buffer_;
-};
-class PsyferContext {
-public:
-    struct Config {
-        bool generate_encryption_key = true;      // Generate symmetric encryption key
-        bool generate_signing_key = true;         // Generate Ed25519 key pair
-        bool generate_key_exchange = true;        // Generate X25519 key pair
-        std::chrono::hours key_rotation_period{24 * 30}; // Default 30 days
-        std::string identity_name;                // Optional identity label
-    };
-    [[nodiscard]] static result<std::unique_ptr<PsyferContext>> create() noexcept;
-    [[nodiscard]] static result<std::unique_ptr<PsyferContext>> create(
-        const Config& config
-    ) noexcept;
-    [[nodiscard]] static result<std::unique_ptr<PsyferContext>> load(
-        std::span<const std::byte> encrypted_data,
-        std::span<const std::byte, 32> master_key
-    ) noexcept;
-    [[nodiscard]] result<std::vector<std::byte>> save(
-        std::span<const std::byte, 32> master_key
-    ) const noexcept;
-    struct EncryptResult {
-        std::array<std::byte, 12> nonce;
-        std::array<std::byte, 16> tag;
-    };
-    [[nodiscard]] result<EncryptResult> encrypt_aes(
-        std::span<std::byte> plaintext,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    [[nodiscard]] std::error_code decrypt_aes(
-        std::span<std::byte> ciphertext,
-        std::span<const std::byte, 12> nonce,
-        std::span<const std::byte, 16> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    [[nodiscard]] result<std::vector<std::byte>> encrypt_string(
-        std::string_view plaintext
-    ) noexcept;
-    [[nodiscard]] result<std::string> decrypt_string(
-        std::span<const std::byte> ciphertext
-    ) noexcept;
-    [[nodiscard]] result<EncryptResult> encrypt_chacha(
-        std::span<std::byte> plaintext,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    [[nodiscard]] std::error_code decrypt_chacha(
-        std::span<std::byte> ciphertext,
-        std::span<const std::byte, 12> nonce,
-        std::span<const std::byte, 16> tag,
-        std::span<const std::byte> aad = {}
-    ) noexcept;
-    [[nodiscard]] result<std::vector<std::byte>> encrypt_for(
-        std::span<const std::byte> plaintext,
-        std::span<const std::byte, 32> recipient_public_key
-    ) noexcept;
-    [[nodiscard]] result<std::vector<std::byte>> decrypt_from(
-        std::span<const std::byte> ciphertext,
-        std::span<const std::byte, 32> sender_public_key
-    ) noexcept;
-    [[nodiscard]] std::span<const std::byte, 32> get_public_key() const noexcept {
-        return x25519_keypair_.public_key;
-    }
-    [[nodiscard]] result<std::array<std::byte, 64>> sign(
-        std::span<const std::byte> message
-    ) noexcept;
-    [[nodiscard]] result<std::array<std::byte, 64>> sign_string(
-        std::string_view message
-    ) noexcept;
-    [[nodiscard]] bool verify(
-        std::span<const std::byte> message,
-        std::span<const std::byte, 64> signature,
-        std::span<const std::byte, 32> public_key
-    ) noexcept;
-    [[nodiscard]] std::span<const std::byte, 32> get_signing_public_key() const noexcept {
-        return ed25519_keypair_.public_key;
-    }
-    [[nodiscard]] std::array<std::byte, 32> hmac256(
-        std::span<const std::byte> message
-    ) noexcept;
-    [[nodiscard]] std::array<std::byte, 64> hmac512(
-        std::span<const std::byte> message
-    ) noexcept;
-    [[nodiscard]] bool verify_hmac256(
-        std::span<const std::byte> message,
-        std::span<const std::byte, 32> mac
-    ) noexcept;
-    [[nodiscard]] result<secure_key_256> derive_key(
-        std::string_view purpose,
-        std::span<const std::byte> salt = {}
-    ) noexcept;
-    template<size_t KeySize>
-    [[nodiscard]] result<secure_key<KeySize>> derive_key_sized(
-        std::string_view purpose,
-        std::span<const std::byte> salt = {}
-    ) noexcept;
-    [[nodiscard]] bool needs_rotation() const noexcept;
-    [[nodiscard]] std::error_code rotate_keys() noexcept;
-    [[nodiscard]] std::chrono::system_clock::time_point created_at() const noexcept {
-        return created_at_;
-    }
-    [[nodiscard]] const std::string& identity() const noexcept {
-        return identity_name_;
-    }
-    [[nodiscard]] std::span<const std::byte, 32> get_psy_key() const noexcept {
-        return psy_key_.span();
-    }
-    template<typename T>
-    requires HasEncryptedSize<T>
-    [[nodiscard]] result<std::vector<std::byte>> encrypt_object(const T& obj) noexcept {
-        size_t size = obj.encrypted_size();
-        std::vector<std::byte> buffer(size);
-        
-        size_t written = obj.encrypt(buffer, get_psy_key());
-        if (written == 0) {
-            return std::unexpected(make_error_code(error_code::encryption_failed));
-        }
-        
-        buffer.resize(written);
-        return buffer;
-    }
-    template<typename T>
-    requires HasDecrypt<T>
-    [[nodiscard]] result<T> decrypt_object(std::span<const std::byte> data) noexcept {
-        T obj;
-        size_t consumed = obj.decrypt(data, get_psy_key());
-        if (consumed == 0) {
-            return std::unexpected(make_error_code(error_code::decryption_failed));
-        }
-        return obj;
-    }
-    ~PsyferContext() noexcept;
-    PsyferContext(const PsyferContext&) = delete;
-    PsyferContext& operator=(const PsyferContext&) = delete;
-    PsyferContext(PsyferContext&&) noexcept = default;
-    PsyferContext& operator=(PsyferContext&&) noexcept = default;
-private:
-    PsyferContext() noexcept = default;
-    secure_key_256 master_key_;        // Master encryption key
-    secure_key_256 hmac_key_;          // HMAC key
-    secure_key_256 psy_key_;           // Key for psy-c objects
-    x25519::key_pair x25519_keypair_;
-    ed25519::key_pair ed25519_keypair_;
-    std::string identity_name_;
-    std::chrono::system_clock::time_point created_at_;
-    std::chrono::hours rotation_period_;
-    [[nodiscard]] std::error_code initialize_keys(const Config& config) noexcept;
-    [[nodiscard]] std::error_code derive_subkeys() noexcept;
-};
-[[nodiscard]] inline result<std::vector<std::byte>> quick_encrypt(
-    std::span<const std::byte> plaintext,
-    std::span<const std::byte, 32> key
-) noexcept {
-    aes256_gcm cipher;
-    std::vector<std::byte> ciphertext(plaintext.size() + 12 + 16);
-    std::memcpy(ciphertext.data() + 28, plaintext.data(), plaintext.size());
-    std::span<std::byte, 12> nonce(ciphertext.data(), 12);
-    auto err = secure_random::generate(nonce);
-    if (err) return std::unexpected(err);
-    std::span<std::byte> data(ciphertext.data() + 28, plaintext.size());
-    std::span<std::byte, 16> tag(ciphertext.data() + 12, 16);
-    err = cipher.encrypt(data, key, nonce, tag);
-    if (err) return std::unexpected(err);
-    ciphertext.resize(28 + plaintext.size());
-    return ciphertext;
 }
-[[nodiscard]] inline result<std::vector<std::byte>> quick_decrypt(
-    std::span<const std::byte> ciphertext,
-    std::span<const std::byte, 32> key
-) noexcept {
-    if (ciphertext.size() < 28) {
-        return std::unexpected(make_error_code(error_code::invalid_buffer_size));
-    }
-    aes256_gcm cipher;
-    std::array<std::byte, 12> nonce;
-    std::array<std::byte, 16> tag;
-    std::memcpy(nonce.data(), ciphertext.data(), 12);
-    std::memcpy(tag.data(), ciphertext.data() + 12, 16);
-    std::vector<std::byte> plaintext(ciphertext.begin() + 28, ciphertext.end());
-    auto err = cipher.decrypt(plaintext, key, nonce, tag);
-    if (err) return std::unexpected(err);   
-    return plaintext;
-}
-template<typename T>
-[[nodiscard]] inline size_t deserialize_and_decrypt(
-    std::span<const std::byte> source_buffer,
-    T* target,
-    std::span<const std::byte> key
-) noexcept requires HasDecrypt<T> {
-    return T::decrypt(source_buffer, target, key);
-}
-} // namespace psyfer

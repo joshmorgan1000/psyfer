@@ -4,11 +4,18 @@
  */
 
 #include <psyfer.hpp>
+#include <goldenhash.hpp>
 #include <cstring>
 #include <algorithm>
 #include <bit>
+#include <climits>
+#include <iostream>
 
 namespace psyfer {
+
+static constexpr size_t LOW_OPTIMAL_HASH_SIZE = 1827;
+static constexpr size_t MEDIUM_OPTIMAL_HASH_SIZE = 4018;
+static constexpr size_t HIGH_OPTIMAL_HASH_SIZE = 7976;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper for 64-bit reads
@@ -123,18 +130,22 @@ result<size_t> lz4::compress_fast(
     if (output.size() < max_compressed_size(input.size())) {
         return std::unexpected(make_error_code(error_code::invalid_buffer_size));
     }
+
+    // Super fast golden ratio-basd hash that (should) work very well for LZ4
+    if (!hash) {
+        hash = std::make_shared<goldenhash::GoldenHash>(1827);
+    }
+    const uint8_t* iteration_pointer = reinterpret_cast<const uint8_t*>(input.data());
+    const uint8_t* const iterator_end = iteration_pointer + input.size();
+    const uint8_t* const mflimit = iterator_end - MFLIMIT;
+    const uint8_t* const matchlimit = iterator_end - LAST_LITERAL_SIZE;
     
-    const uint8_t* ip = reinterpret_cast<const uint8_t*>(input.data());
-    const uint8_t* const iend = ip + input.size();
-    const uint8_t* const mflimit = iend - MFLIMIT;
-    const uint8_t* const matchlimit = iend - LAST_LITERAL_SIZE;
+    // Alias for compatibility
+    const uint8_t*& ip = iteration_pointer;
+    const uint8_t* const& iend = iterator_end;
     
     uint8_t* op = reinterpret_cast<uint8_t*>(output.data());
     uint8_t* token;
-    
-    // Hash table for finding matches
-    const size_t hash_log = 12;  // 4KB hash table
-    size_t hash_table[1 << hash_log] = {0};
     
     // Acceleration
     acceleration = std::max(1, acceleration);
@@ -142,6 +153,20 @@ result<size_t> lz4::compress_fast(
     // Special case: empty input
     if (input.empty()) {
         return 0;
+    }
+
+    std::vector<uint32_t> hash_table(HASH_TABLE_SIZE);
+    std::fill(hash_table.begin(), hash_table.end(), UINT32_MAX);
+    
+    // Special case: very small input
+    if (input.size() < MFLIMIT) {
+        // Just copy as literals
+        if (output.size() < input.size() + 1) {
+            return std::unexpected(make_error_code(error_code::buffer_too_small));
+        }
+        *op++ = static_cast<uint8_t>(input.size() << ML_BITS);
+        std::memcpy(op, input.data(), input.size());
+        return input.size() + 1;
     }
     
     // First byte is always literal
@@ -152,13 +177,19 @@ result<size_t> lz4::compress_fast(
         const uint8_t* match;
         
         // Find a match
-        uint32_t h = hash4(ip, hash_log);
+        uint32_t h = hash->hash(ip, 4);
         size_t ref = hash_table[h];
-        hash_table[h] = ip - reinterpret_cast<const uint8_t*>(input.data());
-        match = reinterpret_cast<const uint8_t*>(input.data()) + ref;
         
         // Skip forward until we find a match
-        if (ref == 0 || match + MIN_MATCH > ip || read32(match) != read32(ip)) {
+        if (ref == UINT32_MAX) {
+            hash_table[h] = ip - reinterpret_cast<const uint8_t*>(input.data());
+            ip++;
+            continue;
+        }
+        
+        match = reinterpret_cast<const uint8_t*>(input.data()) + ref;
+        if (match >= ip || read32(match) != read32(ip)) {
+            hash_table[h] = ip - reinterpret_cast<const uint8_t*>(input.data());
             ip++;
             continue;
         }
@@ -440,7 +471,7 @@ result<size_t> lz4::compress_hc(
 ) noexcept {
     // High compression variant with chain-based match finding
     if (input.empty()) return 0;
-    if (output.size() < 1) return std::unexpected(error_code::buffer_too_small);
+    if (output.size() < 1) return std::unexpected(make_error_code(error_code::buffer_too_small));
     
     const size_t min_match = 4;
     const size_t max_distance = 65535;
@@ -460,19 +491,13 @@ result<size_t> lz4::compress_hc(
     size_t dst_pos = 0;
     size_t literal_start = 0;
     
-    auto hash4 = [](const std::byte* p) -> uint32_t {
-        uint32_t v;
-        std::memcpy(&v, p, 4);
-        return (v * 0x9E3779B1) >> 16;  // Golden ratio hash
-    };
-    
     // Build hash chains
     while (src_pos + min_match <= input.size()) {
         if (src_pos + 12 > input.size()) break;
         
-        uint32_t hash = hash4(&input[src_pos]);
-        uint32_t old_head = hash_table[hash];
-        hash_table[hash] = chains.size();
+        uint32_t hash_val = hash->hash(reinterpret_cast<const uint8_t*>(&input[src_pos]), 4);
+        uint32_t old_head = hash_table[hash_val];
+        hash_table[hash_val] = chains.size();
         chains.push_back({static_cast<uint32_t>(src_pos), old_head});
         
         // Find best match in chain
@@ -511,7 +536,7 @@ result<size_t> lz4::compress_hc(
             size_t literal_len = src_pos - literal_start;
             if (!emit_sequence(input, output, literal_start, literal_len,
                              best_match_dist, best_match_len, dst_pos)) {
-                return std::unexpected(error_code::buffer_too_small);
+                return std::unexpected(make_error_code(error_code::buffer_too_small));
             }
             
             src_pos += best_match_len;
@@ -523,7 +548,7 @@ result<size_t> lz4::compress_hc(
     
     // Emit final literals
     if (!emit_final_literals(input, output, literal_start, input.size(), dst_pos)) {
-        return std::unexpected(error_code::buffer_too_small);
+        return std::unexpected(make_error_code(error_code::buffer_too_small));
     }
     
     return dst_pos;
