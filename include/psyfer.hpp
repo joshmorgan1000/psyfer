@@ -1292,7 +1292,7 @@ struct pair_header {
     }
 };
 static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static std::string base64_encode(const std::span<uint8_t>& bytes_to_encode) {
+inline static std::string base64_encode(const std::span<uint8_t>& bytes_to_encode) {
     std::string ret;
     int i = 0;
     int j = 0;
@@ -1321,7 +1321,7 @@ static std::string base64_encode(const std::span<uint8_t>& bytes_to_encode) {
     }
     return ret;
 }
-std::string base64_decode(std::string_view encoded_string) {
+inline static std::string base64_decode(std::string_view encoded_string) {
     size_t in_len = encoded_string.size();
     int i = 0;
     int j = 0;
