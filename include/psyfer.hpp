@@ -1321,11 +1321,6 @@ static std::string base64_encode(const std::span<uint8_t>& bytes_to_encode) {
     }
     return ret;
 }
-std::string base64_encode(std::string string_to_encode) {
-    auto bytes_to_encode = reinterpret_cast<uint8_t*>(string_to_encode.data());
-    auto in_len = static_cast<unsigned int>(string_to_encode.size());
-    return base64_encode(std::span<uint8_t>(bytes_to_encode, in_len));
-}
 std::string base64_decode(std::string_view encoded_string) {
     size_t in_len = encoded_string.size();
     int i = 0;
