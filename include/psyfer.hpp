@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PSYFER_MAIN_HPP
+#define PSYFER_MAIN_HPP
+
 #include <array>
 #include <concepts>
 #include <cstddef>
@@ -1289,4 +1291,68 @@ struct pair_header {
         return h;
     }
 };
+static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static std::string base64_encode(const std::span<uint8_t>& bytes_to_encode) {
+    std::string ret;
+    int i = 0;
+    int j = 0;
+    uint8_t bytes_3[3];
+    uint8_t bytes_4[4];
+    auto in_len = static_cast<unsigned int>(bytes_to_encode.size());
+    while (in_len--) {
+        bytes_3[i++] = bytes_to_encode.data()[bytes_to_encode.size() - in_len - 1];
+        if (i == 3) {
+            bytes_4[0] = (bytes_3[0] & 0xfc) >> 2;
+            bytes_4[1] = ((bytes_3[0] & 0x03) << 4) + ((bytes_3[1] & 0xf0) >> 4);
+            bytes_4[2] = ((bytes_3[1] & 0x0f) << 2) + ((bytes_3[2] & 0xc0) >> 6);
+            bytes_4[3] = bytes_3[2] & 0x3f;
+            for(i = 0; (i <4) ; i++) ret += base64_chars[bytes_4[i]];
+            i = 0;
+        }
+    }
+    if (i) {
+        for(j = i; j < 3; j++)
+        bytes_3[j] = '\0';
+        bytes_4[0] = ( bytes_3[0] & 0xfc) >> 2;
+        bytes_4[1] = ((bytes_3[0] & 0x03) << 4) + ((bytes_3[1] & 0xf0) >> 4);
+        bytes_4[2] = ((bytes_3[1] & 0x0f) << 2) + ((bytes_3[2] & 0xc0) >> 6);
+        for (j = 0; (j < i + 1); j++) ret += base64_chars[bytes_4[j]];
+        while ((i++ < 3)) ret += '=';
+    }
+    return ret;
 }
+std::string base64_encode(std::string string_to_encode) {
+    auto bytes_to_encode = reinterpret_cast<uint8_t*>(string_to_encode.data());
+    auto in_len = static_cast<unsigned int>(string_to_encode.size());
+    return base64_encode(std::span<uint8_t>(bytes_to_encode, in_len));
+}
+std::string base64_decode(std::string_view encoded_string) {
+    size_t in_len = encoded_string.size();
+    int i = 0;
+    int j = 0;
+    int in_ = 0;
+    unsigned char bytes_4[4], bytes_3[3];
+    std::string ret;
+    while (in_len-- && ( encoded_string[in_] != '=')) {
+        bytes_4[i++] = encoded_string[in_]; in_++;
+        if (i ==4) {
+            for (i = 0; i <4; i++) bytes_4[i] = base64_chars.find(bytes_4[i]) & 0xff;
+            bytes_3[0] = ( bytes_4[0] << 2) + ((bytes_4[1] & 0x30) >> 4);
+            bytes_3[1] = ((bytes_4[1] & 0xf) << 4) + ((bytes_4[2] & 0x3c) >> 2);
+            bytes_3[2] = ((bytes_4[2] & 0x3) << 6) +   bytes_4[3];
+            for (i = 0; (i < 3); i++) ret += bytes_3[i];
+            i = 0;
+        }
+    }
+    if (i) {
+        for (j = 0; j < i; j++)
+        bytes_4[j] = base64_chars.find(bytes_4[j]) & 0xff;
+        bytes_3[0] = (bytes_4[0] << 2) + ((bytes_4[1] & 0x30) >> 4);
+        bytes_3[1] = ((bytes_4[1] & 0xf) << 4) + ((bytes_4[2] & 0x3c) >> 2);
+        for (j = 0; (j < i - 1); j++) ret += bytes_3[j];
+    }
+    return ret;
+}
+}
+
+#endif // PSYFER_MAIN_HPP

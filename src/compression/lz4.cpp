@@ -13,10 +13,6 @@
 
 namespace psyfer {
 
-static constexpr size_t LOW_OPTIMAL_HASH_SIZE = 1827;
-static constexpr size_t MEDIUM_OPTIMAL_HASH_SIZE = 4018;
-static constexpr size_t HIGH_OPTIMAL_HASH_SIZE = 7976;
-
 // ────────────────────────────────────────────────────────────────────────────
 // Helper for 64-bit reads
 // ────────────────────────────────────────────────────────────────────────────
