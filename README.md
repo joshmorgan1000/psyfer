@@ -1,5 +1,3 @@
-# Psyfer
-
 <div align="center">
   <img src="psyfer_logo.png" alt="Psyne Logo" width="150"/>
 
