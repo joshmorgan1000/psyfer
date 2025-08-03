@@ -1,7 +1,7 @@
 <div align="center">
   <img src="psyfer_logo.png" alt="Psyne Logo" width="150"/>
 
-A modern, blazing-fast, and easy-to-use encryption library with built-in compression features. Psyfer provides a comprehensive cryptographic suite for C++23 applications with zero-copy operations and hardware acceleration.
+Psyfer provides a comprehensive cryptographic suite for C++23 applications with zero-copy operations and hardware acceleration.
 </div>
 
 ## Features
